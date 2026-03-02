@@ -1,0 +1,5 @@
+{
+  "name": "PM Copilot",
+  "description": "Asistente basado en LLM para transformar descripciones de proyectos en artefactos de project management.",
+  "requestFramePermissions": []
+}
