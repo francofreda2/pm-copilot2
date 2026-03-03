@@ -105,6 +105,8 @@ export default function App() {
       activities: [],
       tasks: [],
       risks: [],
+      team: [],
+      customLabels: [],
       flowSvg: '',
       wbsSvg: ''
     };
@@ -124,6 +126,8 @@ export default function App() {
       activities: project.activities || [],
       tasks: project.tasks || [],
       risks: project.risks || [],
+      team: project.team || [],
+      customLabels: project.customLabels || [],
       flowSvg: project.flowSvg || '',
       wbsSvg: project.wbsSvg || ''
     };
