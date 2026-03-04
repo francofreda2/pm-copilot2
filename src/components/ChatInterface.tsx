@@ -105,7 +105,7 @@ Por favor, preséntate y comienza directamente con el Paso 1 de la FASE 1 (Acta 
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-sm border border-zinc-200 overflow-hidden">
+    <div className="flex flex-col h-[calc(100dvh-8rem)] bg-white rounded-2xl shadow-sm border border-zinc-200 overflow-hidden">
       
       {/* Área de mensajes */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">

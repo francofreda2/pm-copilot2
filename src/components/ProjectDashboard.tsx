@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { ProjectData, Task, Milestone, OEP, Activity, Risk } from "../types";
 import { RefreshCw, Edit2, Check, X } from "lucide-react";
 
@@ -331,7 +331,15 @@ function calculateCPM(tasks: Task[]) {
 
 export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: Props) {
   const [activeTab, setActiveTab] = useState("overview");
-  
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const [isEditingProject, setIsEditingProject] = useState(false);
   const [projectForm, setProjectForm] = useState({
     name: data.name, businessObjective: data.businessObjective, projectType: data.projectType, status: data.status,
@@ -347,7 +355,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
 
   const [editIndex, setEditIndex] = useState<{type: string, idx: number | null}>({type: '', idx: null});
 
-  const [taskForm, setTaskForm] = useState<{id:string, name:string, om:string, p:string, te:string, pred:string, rec:string, rc:string, dur:string, status: 'pending'|'in_progress'|'completed'}>({ id:"", name:"", om:"", p:"", te:"", pred:"", rec:"", rc:"SÍ", dur:"", status:"pending" });
+  const [taskForm, setTaskForm] = useState<{id:string, name:string, om:string, p:string, te:string, pred:string, rec:string, rc:string, dur:string, status: 'pending'|'in_progress'|'completed'|'blocked'}>({ id:"", name:"", om:"", p:"", te:"", pred:"", rec:"", rc:"SÍ", dur:"", status:"pending" });
   const [msForm, setMsForm] = useState({ n:"", w:"", s:"pending" });
   const [oepForm, setOepForm] = useState({ id:"", n:"", kpi:"" });
   const [actForm, setActForm] = useState({ n:"", r:"", d:"", s:"pend" });
@@ -466,8 +474,8 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
   ];
 
   return (
-    <div style={S.shell}>
-      <aside style={S.sidebar}>
+    <div style={{ ...S.shell, gridTemplateColumns: isMobile ? '1fr' : '220px 1fr' }}>
+      <aside style={{ ...S.sidebar, display: isMobile ? 'none' : 'flex' }}>
         <div style={S.logoBox}>
           <div style={S.logoTitle}>
             <div style={{ width:32,height:32,borderRadius:8,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>📋</div>
@@ -493,7 +501,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
         </div>
       </aside>
 
-      <main style={S.main}>
+      <main style={{ ...S.main, padding: isMobile ? '16px' : '28px 32px' }}>
         <div style={S.hdrWrap}>
           {isEditingProject ? (
             <div style={{flex: 1, marginRight: 20}}>
@@ -568,7 +576,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
         </div>
 
         {activeTab==="overview" && <>
-          <div style={S.kpiGrid}>
+          <div style={{ ...S.kpiGrid, gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)' }}>
             {[
               { tag:"Scope Health", key: "kpiScope", val: data.kpiScope || "N/A", c:"#059669", ico:"✓" },
               { tag:"Schedule",     key: "kpiSchedule", val: data.kpiSchedule || "N/A", c:"#d97706", ico:"⏱" },
@@ -626,7 +634,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
             </div>
           </div>
 
-          <div style={S.twoCol}>
+          <div style={{ ...S.twoCol, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
             <div style={S.card}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
                 <div style={{...S.sectionTitle, marginBottom:0}}>Objetivos OEP<div style={S.divider}/></div>
@@ -943,7 +951,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
                   <div><div style={S.formLabel}>Duración (h)</div><input style={S.input} type="number" value={taskForm.dur} onChange={e=>setTaskForm({...taskForm,dur:e.target.value})} placeholder="Auto (P/5)"/></div>
                   <div><div style={S.formLabel}>Estado</div>
                     <select style={S.input} value={taskForm.status} onChange={e=>setTaskForm({...taskForm,status:e.target.value as any})}>
-                      <option value="pending">Pendiente</option><option value="in_progress">En curso</option><option value="completed">Completado</option>
+                      <option value="pending">Pendiente</option><option value="in_progress">En curso</option><option value="completed">Completado</option><option value="blocked">Bloqueado</option>
                     </select>
                   </div>
                   <div><div style={S.formLabel}>Predecesoras</div><input style={S.input} value={taskForm.pred} onChange={e=>setTaskForm({...taskForm,pred:e.target.value})} placeholder="T2, T3"/></div>

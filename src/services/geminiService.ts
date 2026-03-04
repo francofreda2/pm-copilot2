@@ -49,7 +49,7 @@ Comando de inicio: Recibirás los datos iniciales del proyecto. Preséntate brev
 `;
 
     const formattedHistory = history ? history.map(m => ({
-      role: m.role === 'model' || m.role === 'assistant' ? 'model' : 'user',
+      role: m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content }]
     })) : undefined;
 

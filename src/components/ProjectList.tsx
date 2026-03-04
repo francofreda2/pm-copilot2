@@ -65,7 +65,7 @@ export default function ProjectList({ projects, onSelect, onNew, onDelete }: Pro
                       onDelete(project.id);
                     }
                   }}
-                  className="text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-zinc-400 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
