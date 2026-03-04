@@ -5,7 +5,7 @@ export class PMChatService {
   private chat: any;
 
   constructor(history?: ChatMessage[]) {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey || apiKey === 'AI Studio Free Tier') {
       throw new Error("Por favor, configura una API Key válida en las variables de entorno (VITE_GEMINI_API_KEY).");
@@ -75,7 +75,7 @@ Comando de inicio: Recibirás los datos iniciales del proyecto. Preséntate brev
 }
 
 export async function extractDashboardData(messages: ChatMessage[], currentData: ProjectData): Promise<ProjectData> {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'AI Studio Free Tier') {
     throw new Error("API Key no configurada.");
   }
