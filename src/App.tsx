@@ -4,13 +4,25 @@ import InitialForm from './components/InitialForm';
 import ProjectDashboard from './components/ProjectDashboard';
 import ProjectList from './components/ProjectList';
 import LoginScreen from './components/LoginScreen';
-import { LayoutDashboard, Menu, X, MessageSquare, BarChart2, ChevronLeft, LogOut } from 'lucide-react';
+import { LayoutDashboard, Menu, X, MessageSquare, BarChart2, ChevronLeft, LogOut, Moon, Sun } from 'lucide-react';
 import { ProjectData, ChatMessage } from './types';
 import { extractDashboardData } from './services/geminiService';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || 'null'));
+  const [darkMode, setDarkMode] = useState<boolean>(() => localStorage.getItem('theme') === 'dark');
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.setAttribute('data-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      root.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectData[]>([]);
