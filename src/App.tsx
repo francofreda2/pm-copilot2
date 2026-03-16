@@ -105,6 +105,9 @@ export default function App() {
       activities: [],
       tasks: [],
       risks: [],
+      wbsNodes: [],
+      changeLog: [],
+      projectStartDate: new Date().toISOString().split('T')[0],
       flowSvg: '',
       wbsSvg: ''
     };
@@ -124,6 +127,9 @@ export default function App() {
       activities: project.activities || [],
       tasks: project.tasks || [],
       risks: project.risks || [],
+      wbsNodes: project.wbsNodes || [],
+      changeLog: project.changeLog || [],
+      projectStartDate: project.projectStartDate || new Date().toISOString().split('T')[0],
       flowSvg: project.flowSvg || '',
       wbsSvg: project.wbsSvg || ''
     };
@@ -140,6 +146,57 @@ export default function App() {
       setView('list');
     }
   };
+
+  const mapWBSNode = (n: any): any => ({
+    id: n.id || String(Math.random()).slice(2, 8),
+    name: n.name || 'Sin nombre',
+    level: n.level ?? 1,
+    owner: n.owner,
+    duration: n.duration,
+    children: (n.children || []).map((c: any) => mapWBSNode(c)),
+    collapsed: false,
+  });
+
+  const handleImportProject = (parsedData: any) => {
+    const newProject: ProjectData = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: parsedData.name || 'Proyecto Importado',
+      businessObjective: parsedData.businessObjective || '',
+      projectType: parsedData.projectType || 'Otro',
+      description: 'Generado automáticamente desde archivo importado',
+      status: parsedData.status || 'Planificación',
+      lastUpdated: new Date().toISOString(),
+      projectStartDate: new Date().toISOString().split('T')[0],
+      chatMessages: [
+         { id: 'm1', role: 'user', content: `Importé un archivo y PM Copilot generó la base del proyecto.` },
+         { id: 'm2', role: 'model', content: `¡Hola! He analizado tu documento y creado el WBS, tareas y riesgos iniciales. Podés revisarlos en el Dashboard.` }
+      ],
+      kpiScope: parsedData.kpiScope || 'N/A',
+      kpiSchedule: parsedData.kpiSchedule || 'N/A',
+      kpiBudget: parsedData.kpiBudget || 'N/A',
+      kpiQuality: parsedData.kpiQuality || 'N/A',
+      milestones: (parsedData.milestones || []).map((m: any) => ({ n: m.n || 'Hito', w: m.w || 'TBD', s: m.s || 'pending' })),
+      oeps: (parsedData.oeps || []).map((o: any) => ({ id: o.id || 'OP1', n: o.n || 'Objetivo', kpi: o.kpi || 'TBD' })),
+      activities: (parsedData.activities || []).map((a: any) => ({ n: a.n || 'Actividad', r: a.r || 'TBD', d: a.d || 'TBD', s: a.s || 'pend' })),
+      tasks: (parsedData.tasks || []).map((t:any, i:number) => ({
+        id: t.id || `T${i + 1}`, name: t.name || 'Sin nombre', om: t.om || 1, p: t.p || Number(t.dur) || 8, te: t.te || String(Number(t.dur) || 8), pred: t.pred || '-', rec: t.rec || 'TBD', rc: t.rc !== false, start: 0, dur: Number(t.dur) || 8, status: t.status || 'pending'
+      })),
+      risks: (parsedData.risks || []).map((r:any) => ({
+         id: r.id || 'R1', title: r.title || 'Riesgo', v: r.v || 'mid', badge: r.badge || 'Medio', desc: r.desc || ''
+      })),
+      wbsNodes: (parsedData.wbsNodes || []).map((n:any) => mapWBSNode(n)),
+      changeLog: [{ timestamp: new Date().toISOString(), action: 'Creación', detail: 'Proyecto generado desde importación de archivo' }],
+      flowSvg: parsedData.flowSvg || '',
+      wbsSvg: parsedData.wbsSvg || ''
+    };
+    
+    setProjects(prev => [newProject, ...prev]);
+    setCurrentProject(newProject);
+    setView('dashboard');
+    setIsSidebarOpen(false);
+    saveProjectToBackend(newProject);
+  };
+
 
   const handleSyncDashboard = async () => {
     if (!currentProject || currentProject.chatMessages.length === 0) return;
@@ -161,129 +218,115 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900 flex flex-col">
+    <div style={{ minHeight: '100vh', background: 'var(--bg-app)', fontFamily: "'Inter', sans-serif", color: 'var(--neutral-900)', display: 'flex', flexDirection: 'column' }}>
       {/* Navbar */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-20 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="navbar" style={{ '@media print': { display: 'none' } } as any}>
+        <div className="navbar-inner">
+          <div className="navbar-brand">
             {view === 'chat' && (
-              <button 
+              <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="lg:hidden p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-lg"
+                className="btn-icon"
+                style={{ display: 'none' }}
               >
-                {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
             )}
-            
+
             {view !== 'list' && (
-              <button 
+              <button
                 onClick={() => {
                   setCurrentProject(null);
                   setView('list');
                   setIsSidebarOpen(false);
                 }}
-                className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-lg flex items-center gap-1"
+                className="btn-icon"
                 title="Volver a mis proyectos"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft size={20} />
               </button>
             )}
 
-            <div className="bg-indigo-600 p-2 rounded-lg">
-              <LayoutDashboard className="w-5 h-5 text-white" />
+            <div className="navbar-brand-icon">
+              <LayoutDashboard size={20} color="#fff" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-zinc-900 hidden sm:block">PM Copilot</h1>
+            <span className="navbar-brand-text">PM Copilot</span>
           </div>
-          
-          <div className="flex items-center gap-4">
+
+          <div className="navbar-actions">
             {currentProject && (view === 'chat' || view === 'dashboard') && (
-              <div className="flex bg-zinc-100 p-1 rounded-lg">
+              <div className="view-toggle">
                 <button
                   onClick={() => { setView('chat'); setIsSidebarOpen(false); }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    view === 'chat' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
+                  className={`view-toggle-btn ${view === 'chat' ? 'active' : ''}`}
                 >
-                  <MessageSquare className="w-4 h-4" />
-                  <span className="hidden sm:inline">Chat</span>
+                  <MessageSquare size={15} />
+                  <span>Chat</span>
                 </button>
                 <button
                   onClick={() => { setView('dashboard'); setIsSidebarOpen(false); }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    view === 'dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
+                  className={`view-toggle-btn ${view === 'dashboard' ? 'active' : ''}`}
                 >
-                  <BarChart2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Dashboard</span>
+                  <BarChart2 size={15} />
+                  <span>Dashboard</span>
                 </button>
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm text-zinc-500 border-l border-zinc-200 pl-4 ml-2">
-              <span className="hidden sm:inline">{user?.email}</span>
-              <button onClick={handleLogout} className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500 hover:text-red-600 transition-colors" title="Cerrar sesión">
-                <LogOut className="w-4 h-4" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderLeft: '1px solid var(--border-light)', paddingLeft: 16, marginLeft: 8 }}>
+              <span style={{ fontSize: 13, color: 'var(--neutral-500)', fontWeight: 500 }}>{user?.email}</span>
+              <button onClick={handleLogout} className="btn-icon" title="Cerrar sesión" style={{ color: 'var(--neutral-400)' }}>
+                <LogOut size={17} />
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content Layout */}
-      <div className={`flex-1 w-full ${view === 'chat' ? 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-8' : ''}`}>
-        
-        {/* Sidebar (Instrucciones) - Solo visible en Chat */}
+      {/* Main Content */}
+      <div style={{ flex: 1, width: '100%', ...(view === 'chat' ? { maxWidth: 1280, margin: '0 auto', padding: '24px', display: 'flex', gap: 32 } : {}) }}>
+
+        {/* Sidebar instructions – Chat only */}
         {view === 'chat' && (
-          <aside className={`
-            fixed lg:static inset-y-0 left-0 z-10 w-72 bg-white lg:bg-transparent border-r lg:border-none border-zinc-200 p-6 lg:p-0 transform transition-transform duration-200 ease-in-out
-            ${isSidebarOpen ? 'translate-x-0 mt-16 lg:mt-0' : '-translate-x-full lg:hidden'}
-          `}>
-            <div className="sticky top-24">
-              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
+          <aside style={{ width: 260, flexShrink: 0, display: isSidebarOpen ? 'block' : 'none', position: 'sticky', top: 84 }}>
+            <div className="card animate-slide-in" style={{ padding: 20 }}>
+              <h2 style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--primary-600)', marginBottom: 14, fontFamily: "'JetBrains Mono', monospace" }}>
                 Instrucciones
               </h2>
-              <div className="bg-white rounded-xl border border-zinc-200 p-4 text-sm text-zinc-600 space-y-3 shadow-sm">
-                <p>
+              <div style={{ fontSize: 13, color: 'var(--neutral-600)', lineHeight: 1.7 }}>
+                <p style={{ marginBottom: 12 }}>
                   <strong>1. Trabajo Iterativo:</strong> PM Copilot te guiará fase por fase.
                 </p>
-                <p>
-                  <strong>2. Gráficos SVG:</strong> Los diagramas se renderizarán automáticamente en la pantalla.
+                <p style={{ marginBottom: 12 }}>
+                  <strong>2. Gráficos SVG:</strong> Los diagramas se renderizarán automáticamente.
                 </p>
                 <p>
-                  <strong>3. Dashboard Ejecutivo:</strong> Cuando termines (o en cualquier momento), ve a la pestaña "Dashboard" y haz clic en "Sincronizar" para extraer toda la información generada.
+                  <strong>3. Dashboard:</strong> Ve a "Dashboard" y sincronizá para extraer la info generada.
                 </p>
               </div>
             </div>
           </aside>
         )}
 
-        {/* Overlay for mobile sidebar */}
-        {isSidebarOpen && view === 'chat' && (
-          <div 
-            className="fixed inset-0 bg-zinc-900/20 z-0 lg:hidden mt-16"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-
         {/* Main Area */}
-        <main className="flex-1 min-w-0 h-full">
+        <main style={{ flex: 1, minWidth: 0 }}>
           {view === 'list' && (
-            <ProjectList 
-              projects={projects} 
-              onSelect={handleSelectProject} 
-              onNew={() => { setView('new'); setIsSidebarOpen(false); }} 
+            <ProjectList
+              projects={projects}
+              onSelect={handleSelectProject}
+              onNew={() => { setView('new'); setIsSidebarOpen(false); }}
               onDelete={handleDeleteProject}
             />
           )}
 
           {view === 'new' && (
-            <div className="max-w-7xl mx-auto px-4 py-8">
-              <InitialForm onSubmit={handleInitialSubmit} />
+            <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
+              <InitialForm onSubmit={handleInitialSubmit} onImport={handleImportProject} />
             </div>
           )}
 
           {view === 'chat' && currentProject && (
-            <ChatInterface 
-              initialContext={currentProject} 
+            <ChatInterface
+              initialContext={currentProject}
               messages={currentProject.chatMessages}
               setMessages={(msgs) => {
                 const newMessages = typeof msgs === 'function' ? msgs(currentProject.chatMessages) : msgs;
@@ -293,8 +336,8 @@ export default function App() {
           )}
 
           {view === 'dashboard' && currentProject && (
-            <ProjectDashboard 
-              data={currentProject} 
+            <ProjectDashboard
+              data={currentProject}
               onUpdate={updateCurrentProject}
               onSync={handleSyncDashboard}
               isSyncing={isSyncing}

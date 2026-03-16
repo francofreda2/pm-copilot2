@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { LayoutDashboard } from 'lucide-react';
 
 interface Props {
   onLogin: (token: string, user: any) => void;
@@ -36,57 +37,80 @@ export default function LoginScreen({ onLogin }: Props) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f5ff', fontFamily: "'DM Sans', sans-serif" }}>
-      <div style={{ background: '#fff', padding: '40px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(30,64,175,0.1)', width: '100%', maxWidth: '400px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#1e3a8a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', margin: '0 auto 16px' }}>📋</div>
-          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '24px', color: '#0f172a', margin: 0 }}>PM Copilot</h1>
-          <p style={{ color: '#64748b', fontSize: '14px', marginTop: '8px' }}>
-            {isRegister ? 'Crea tu cuenta para empezar' : 'Inicia sesión en tu cuenta'}
-          </p>
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-logo">
+          <LayoutDashboard size={28} color="#fff" />
         </div>
+        <h1 className="login-title">PM Copilot</h1>
+        <p className="login-subtitle">
+          {isRegister ? 'Crea tu cuenta para empezar' : 'Inicia sesión en tu cuenta'}
+        </p>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {error && <div style={{ padding: '10px', background: '#fef2f2', color: '#991b1b', borderRadius: '8px', fontSize: '13px', textAlign: 'center' }}>{error}</div>}
-          
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#475569', marginBottom: '6px', fontWeight: 600 }}>Email</label>
-            <input 
-              type="email" 
-              required 
-              value={email} 
+        <form onSubmit={handleSubmit}>
+          {error && (
+            <div className="error-box" style={{ marginBottom: 16 }}>
+              {error}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input
+              type="email"
+              required
+              value={email}
               onChange={e => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #cbd5e1', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+              className="form-input"
               placeholder="tu@email.com"
+              autoComplete="email"
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#475569', marginBottom: '6px', fontWeight: 600 }}>Contraseña</label>
-            <input 
-              type="password" 
-              required 
-              value={password} 
+          <div className="form-group">
+            <label className="form-label">Contraseña</label>
+            <input
+              type="password"
+              required
+              value={password}
               onChange={e => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #cbd5e1', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+              className="form-input"
               placeholder="••••••••"
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
-            style={{ width: '100%', padding: '12px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', marginTop: '8px', opacity: loading ? 0.7 : 1 }}
+            className="btn btn-primary btn-full btn-lg"
+            style={{ marginTop: 8 }}
           >
-            {loading ? 'Cargando...' : (isRegister ? 'Registrarse' : 'Iniciar Sesión')}
+            {loading ? (
+              <>
+                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                Cargando...
+              </>
+            ) : (
+              isRegister ? 'Crear Cuenta' : 'Iniciar Sesión'
+            )}
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '13px', color: '#64748b' }}>
+        <div style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: 'var(--neutral-500)' }}>
           {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
-          <button 
-            onClick={() => { setIsRegister(!isRegister); setError(''); }} 
-            style={{ background: 'none', border: 'none', color: '#1d4ed8', fontWeight: 600, cursor: 'pointer', marginLeft: '6px' }}
+          <button
+            onClick={() => { setIsRegister(!isRegister); setError(''); }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--primary-600)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginLeft: 6,
+              fontFamily: 'Inter, sans-serif',
+              fontSize: 13,
+            }}
           >
             {isRegister ? 'Inicia Sesión' : 'Regístrate'}
           </button>

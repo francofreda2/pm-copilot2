@@ -1,6 +1,16 @@
+// PM Copilot Dashboard v2
 import React, { useState, useCallback } from "react";
 import { ProjectData, Task, Milestone, OEP, Activity, Risk } from "../types";
-import { RefreshCw, Edit2, Check, X } from "lucide-react";
+import { RefreshCw, Edit2, Check, X, Upload } from "lucide-react";
+import WBSEditor from "./WBSEditor";
+import GanttChart from "./GanttChart";
+import WBSChart from './WBSChart';
+import PMAdvisor from "./PMAdvisor";
+import ProjectHealth from "./ProjectHealth";
+import FileUploadProcessor from "./FileUploadProcessor";
+import { exportToJiraCSV, exportToICS } from "../utils/exportUtils";
+import BurndownChart from "./BurndownChart";
+import ResourceAllocation from "./ResourceAllocation";
 
 interface Props {
   data: ProjectData;
@@ -13,94 +23,101 @@ const BAR_COLORS = ["#1d4ed8","#0369a1","#059669","#7c3aed","#b45309","#dc2626",
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
 const S: Record<string, any> = {
-  shell: { display:"grid", gridTemplateColumns:"220px 1fr", minHeight:"100vh", fontFamily:"'DM Sans', system-ui, sans-serif", background:"#f0f5ff" },
-  sidebar: { background:"#1e3a8a", display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
-  logoBox: { padding:"24px 20px 20px", borderBottom:"1px solid rgba(255,255,255,0.1)" },
-  logoTitle: { fontFamily:"Georgia, serif", fontWeight:700, fontSize:17, color:"#fff", letterSpacing:.5, display:"flex", alignItems:"center", gap:10 },
-  logoSub: { fontSize:9, letterSpacing:2, color:"rgba(255,255,255,0.4)", textTransform:"uppercase", marginTop:5, fontFamily:"monospace" },
-  navSection: { padding:"16px 12px 8px", flex:1 },
-  navLabel: { fontSize:9, letterSpacing:2, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", fontFamily:"monospace", padding:"0 8px 8px" },
+  shell: { display:"grid", gridTemplateColumns:"240px 1fr", minHeight:"100vh", fontFamily:"'Inter', system-ui, sans-serif", background:"var(--bg-app)" },
+  sidebar: { background:"var(--brand-navy)", display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", overflowY:"auto" },
+  logoBox: { padding:"24px 24px 16px", borderBottom:"1px solid rgba(255,255,255,0.05)" },
+  logoTitle: { fontFamily:"'Inter', sans-serif", fontWeight:800, fontSize:20, color:"#fff", letterSpacing:"-0.5px", display:"flex", alignItems:"center", gap:12 },
+  logoIcon: { width:28, height:28, borderRadius:8, background:"var(--primary-600)", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", boxShadow:"0 2px 8px rgba(37,99,235,0.4)" },
+  logoSub: { display: "none" }, // Hidden in Payway design
+  navSection: { padding:"16px 16px", flex:1 },
+  navLabel: { fontSize:10, letterSpacing:1.5, color:"rgba(255,255,255,0.4)", textTransform:"uppercase", fontWeight:600, marginBottom:12, paddingLeft:8 },
   navItem: (active: boolean) => ({
-    display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, fontSize:13, cursor:"pointer", marginBottom:2,
-    color: active ? "#fff" : "rgba(255,255,255,0.6)", background: active ? "rgba(255,255,255,0.15)" : "transparent",
-    fontWeight: active ? 600 : 400, transition:"all .15s", border:"none", width:"100%", textAlign:"left"
+    display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:8, fontSize:14, cursor:"pointer", marginBottom:4,
+    color: active ? "#ffffff" : "rgba(255,255,255,0.65)", 
+    background: active ? "var(--primary-600)" : "transparent",
+    fontWeight: active ? 600 : 500, transition:"all .2s ease", border:"none", width:"100%", textAlign:"left"
   }),
-  sideFooter: { padding:"16px 20px", borderTop:"1px solid rgba(255,255,255,0.1)", fontSize:10, color:"rgba(255,255,255,0.45)", fontFamily:"monospace" },
-  main: { padding:"28px 32px", display:"flex", flexDirection:"column", gap:20, overflowY:"auto" },
-  hdrWrap: { display:"flex", alignItems:"flex-start", justifyContent:"space-between" },
-  hdrH1: { fontFamily:"Georgia, serif", fontSize:24, fontWeight:700, color:"#0f172a", lineHeight:1.25 },
-  hdrSub: { fontSize:12, color:"#64748b", marginTop:4 },
-  badgeRow: { display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" },
+  sideFooter: { padding:"20px 24px", borderTop:"1px solid rgba(255,255,255,0.05)", fontSize:11, color:"rgba(255,255,255,0.5)" },
+  main: { padding:"0", display:"flex", flexDirection:"column", height:"100vh", overflowY:"hidden" },
+  hdrWrap: { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 32px", background:"#fff", borderBottom:"1px solid var(--border-light)", height:"64px" },
+  hdrLeft: { display:"flex", alignItems:"center", gap:16 },
+  hdrH1: { fontFamily:"'Inter', sans-serif", fontSize:20, fontWeight:700, color:"var(--neutral-900)", margin:0 },
+  hdrSub: { display: "none" },
+  badgeRow: { display:"flex", gap:12, alignItems:"center" },
   badge: (variant: string) => {
-    const v: any = { warn:{bg:"#fef3c7",c:"#92400e",bd:"#fde68a"}, ok:{bg:"#dcfce7",c:"#14532d",bd:"#bbf7d0"}, blue:{bg:"#dbeafe",c:"#1e3a8a",bd:"#93c5fd"} }[variant]||{bg:"#f1f5f9",c:"#475569",bd:"#e2e8f0"};
-    return { background:v.bg, color:v.c, border:`1px solid ${v.bd}`, borderRadius:20, padding:"4px 12px", fontSize:11, fontFamily:"monospace", fontWeight:600 };
+    const v: any = { 
+      warn:{bg:"var(--warning-light)",c:"var(--warning)",bd:"#fcd34d"}, 
+      ok:{bg:"var(--success-light)",c:"var(--success)",bd:"#6ee7b7"}, 
+      blue:{bg:"var(--primary-50)",c:"var(--primary-700)",bd:"var(--primary-200)"} 
+    }[variant]||{bg:"var(--neutral-100)",c:"var(--neutral-600)",bd:"var(--neutral-200)"};
+    return { background:v.bg, color:v.c, border:`1px solid ${v.bd}`, borderRadius:6, padding:"6px 12px", fontSize:13, fontWeight:600, display:"flex", alignItems:"center", gap:6 };
   },
-  card: { background:"#fff", border:"1px solid #bfdbfe", borderRadius:14, padding:"22px 24px", boxShadow:"0 1px 4px rgba(30,64,175,0.07), 0 4px 16px rgba(30,64,175,0.05)" },
-  sectionTitle: { fontFamily:"Georgia, serif", fontSize:12, fontWeight:700, letterSpacing:1.5, textTransform:"uppercase", color:"#1d4ed8", display:"flex", alignItems:"center", gap:10, marginBottom:18 },
-  divider: { flex:1, height:1.5, background:"#dbeafe" },
-  kpiGrid: { display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14 },
-  kpiCard: (c: string) => ({ background:"#fff", border:`1px solid ${c}30`, borderRadius:12, padding:"18px 20px", position:"relative", overflow:"hidden", boxShadow:"0 1px 4px rgba(30,64,175,0.06)" }),
-  kpiStripe: (c: string) => ({ position:"absolute", top:0, left:0, right:0, height:4, background:c, borderRadius:"12px 12px 0 0" }),
-  kpiTag: { fontSize:9, letterSpacing:2, color:"#94a3b8", textTransform:"uppercase", fontFamily:"monospace", marginBottom:6 },
-  kpiVal: { fontSize:20, fontWeight:700, fontFamily:"Georgia, serif", color:"#0f172a", lineHeight:1, marginBottom:3 },
-  kpiDesc: { fontSize:11, color:"#64748b" },
-  twoCol: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 },
+  card: { background:"#fff", border:"1px solid var(--border-light)", borderRadius:"var(--radius-md)", padding:"24px", boxShadow:"var(--shadow-sm)" },
+  sectionTitle: { fontFamily:"'Inter', sans-serif", fontSize:15, fontWeight:700, color:"var(--neutral-900)", display:"flex", alignItems:"center", gap:12, marginBottom:16 },
+  divider: { display: "none" },
+  kpiGrid: { display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16 },
+  kpiCard: (c: string) => ({ background:"#fff", border:"1px solid var(--border-light)", borderRadius:"var(--radius-md)", padding:"20px", position:"relative", boxShadow:"var(--shadow-sm)" }),
+  kpiStripe: (c: string) => ({ display: "none" }), // Removed top stripe for cleaner look
+  kpiTag: { fontSize:13, color:"var(--neutral-600)", fontWeight:500, marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"center" },
+  kpiVal: { fontSize:24, fontWeight:700, color:"var(--neutral-900)", lineHeight:1.2 },
+  kpiDesc: { fontSize:13, color:"var(--success)", fontWeight:500, marginTop:8 },
+  twoCol: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 },
   msRow: { display:"flex", alignItems:"flex-start", paddingBottom:8, flexWrap: "wrap", gap: "10px 0" },
   msItem: { display:"flex", flexDirection:"column", alignItems:"center", flex:1, position:"relative", minWidth: "80px" },
   msDot: (state: string) => {
-    const s: any={done:{bg:"#dcfce7",c:"#059669",bd:"#059669"},active:{bg:"#dbeafe",c:"#1d4ed8",bd:"#1d4ed8",shadow:"0 0 0 4px rgba(59,130,246,0.15)"},pending:{bg:"#f1f5f9",c:"#94a3b8",bd:"#e2e8f0"}}[state] || {bg:"#f1f5f9",c:"#94a3b8",bd:"#e2e8f0"};
-    return { width:36, height:36, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, fontFamily:"monospace", background:s.bg, color:s.c, border:`2px solid ${s.bd}`, boxShadow:s.shadow||"none", position:"relative", zIndex:1 };
+    const s: any={done:{bg:"var(--success)",c:"#fff",bd:"var(--success)"},active:{bg:"var(--primary-600)",c:"#fff",bd:"var(--primary-600)",shadow:"0 0 0 4px rgba(37,99,235,0.15)"},pending:{bg:"#fff",c:"var(--neutral-400)",bd:"var(--neutral-300)"}}[state] || {bg:"#fff",c:"var(--neutral-400)",bd:"var(--neutral-300)"};
+    return { width:24, height:24, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, background:s.bg, color:s.c, border:`2px solid ${s.bd}`, boxShadow:s.shadow||"none", position:"relative", zIndex:1 };
   },
-  msLine: (state: string) => ({ position:"absolute", top:18, left:"50%", right:"-50%", height:2, zIndex:0, background:state==="done"?"#059669":state==="active"?"linear-gradient(90deg,#059669,#3b82f6)":"#e2e8f0" }),
-  msLabel: { fontSize:10, color:"#64748b", marginTop:7, textAlign:"center", maxWidth:76, lineHeight:1.4 },
-  msWeek: { fontSize:9, fontFamily:"monospace", color:"#1d4ed8", marginTop:2, fontWeight:600 },
-  oepItem: { display:"grid", gridTemplateColumns:"auto 1fr auto", gap:12, alignItems:"start", padding:13, borderRadius:10, background:"#eff6ff", border:"1px solid #bfdbfe", marginBottom:10 },
-  oepId: { width:32, height:32, borderRadius:7, background:"#1d4ed8", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"monospace", fontSize:10, fontWeight:700, flexShrink:0 },
-  oepName: { fontSize:13, fontWeight:600, color:"#0f172a", marginBottom:2 },
-  oepKpi: { fontSize:11, color:"#64748b" },
-  actItem: { display:"grid", gridTemplateColumns:"1fr auto auto auto auto", alignItems:"center", gap:12, padding:"11px 0", borderBottom:"1px solid #f1f5f9" },
-  actName: { fontSize:13, fontWeight:500, color:"#0f172a" },
-  actResp: { fontSize:10, color:"#94a3b8", fontFamily:"monospace" },
-  actDay: { fontSize:11, fontFamily:"monospace", color:"#b45309", fontWeight:600 },
+  msLine: (state: string) => ({ position:"absolute", top:12, left:"50%", right:"-50%", height:2, zIndex:0, background:state==="done"?"var(--success)":state==="active"?"linear-gradient(90deg,var(--success),var(--primary-600))":"var(--neutral-200)" }),
+  msLabel: { fontSize:11, color:"var(--neutral-700)", marginTop:8, textAlign:"center", maxWidth:80, fontWeight:500 },
+  msWeek: { fontSize:10, color:"var(--neutral-500)", marginTop:2 },
+  oepItem: { display:"grid", gridTemplateColumns:"auto 1fr auto", gap:12, alignItems:"center", padding:"12px 16px", borderRadius:8, background:"#fff", border:"1px solid var(--border-light)", marginBottom:8, boxShadow:"var(--shadow-xs)" },
+  oepId: { width:32, height:32, borderRadius:8, background:"var(--primary-50)", color:"var(--primary-700)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 },
+  oepName: { fontSize:14, fontWeight:600, color:"var(--neutral-900)" },
+  oepKpi: { fontSize:12, color:"var(--neutral-500)" },
+  actItem: { display:"grid", gridTemplateColumns:"1fr auto auto auto auto", alignItems:"center", gap:16, padding:"12px 0", borderBottom:"1px solid var(--border-light)" },
+  actName: { fontSize:14, fontWeight:500, color:"var(--neutral-900)" },
+  actResp: { fontSize:12, color:"var(--neutral-500)" },
+  actDay: { fontSize:12, color:"var(--neutral-700)", fontWeight:500 },
   actStatus: (s: string) => {
-    const v: any={pend:{bg:"#fef3c7",c:"#92400e"},prog:{bg:"#dbeafe",c:"#1e3a8a"},ok:{bg:"#dcfce7",c:"#14532d"}}[s]||{bg:"#f1f5f9",c:"#64748b"};
-    return { background:v.bg, color:v.c, fontSize:10, fontFamily:"monospace", fontWeight:600, padding:"3px 9px", borderRadius:5 };
+    const v: any={pend:{bg:"var(--warning-light)",c:"var(--warning)"},prog:{bg:"var(--primary-50)",c:"var(--primary-700)"},ok:{bg:"var(--success-light)",c:"var(--success)"}}[s]||{bg:"var(--neutral-100)",c:"var(--neutral-600)"};
+    return { background:v.bg, color:v.c, fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:6 };
   },
-  ganttHdr: (weeks: number) => ({ display:"grid", gridTemplateColumns:`190px repeat(${weeks},1fr)`, marginBottom:8 }),
-  ganttHdrCell: (active: boolean) => ({ textAlign:"center", fontSize:9, fontFamily:"monospace", color: active?"#1d4ed8":"#94a3b8", letterSpacing:1, padding:"5px 0", fontWeight: active?700:400 }),
-  ganttRowGrid: { display:"grid", gridTemplateColumns:"190px 1fr", alignItems:"center", gap:12, marginBottom:10 },
-  ganttTrack: (weeks: number) => ({ display:"grid", gridTemplateColumns:`repeat(${weeks},1fr)`, background:"#f8faff", borderRadius:6, height:28, overflow:"hidden", border:"1px solid #e2e8f0", position:"relative" }),
-  ganttBar: (c: string) => ({ position:"absolute", top:4, height:20, borderRadius:5, background:c, display:"flex", alignItems:"center", padding:"0 7px", fontSize:10, fontFamily:"monospace", fontWeight:600, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.15)", transition:"opacity .2s" }),
-  ganttLabelName: { fontSize:12, color:"#0f172a", fontWeight:500 },
-  ganttLabelSub: { fontSize:10, color:"#94a3b8", fontFamily:"monospace" },
-  th: { fontSize:9, fontFamily:"monospace", letterSpacing:1.5, textTransform:"uppercase", color:"#94a3b8", padding:"0 10px 12px", textAlign:"left", borderBottom:"2px solid #dbeafe" },
-  td: { padding:"10px 10px", fontSize:12, verticalAlign:"middle", borderBottom:"1px solid #f1f5f9", color:"#0f172a" },
-  tdId: { padding:"10px 10px", fontSize:11, fontFamily:"monospace", color:"#1d4ed8", fontWeight:700, borderBottom:"1px solid #f1f5f9", verticalAlign:"middle" },
-  tdRc: (ok: boolean) => ({ padding:"10px 10px", fontSize:10, fontFamily:"monospace", fontWeight:700, color: ok?"#059669":"#dc2626", borderBottom:"1px solid #f1f5f9", verticalAlign:"middle" }),
-  tePill: { display:"inline-block", padding:"2px 8px", background:"#eff6ff", color:"#1d4ed8", borderRadius:4, fontFamily:"monospace", fontSize:11, border:"1px solid #bfdbfe" },
-  formWrap: { background:"#eff6ff", border:"1.5px dashed #93c5fd", borderRadius:12, padding:"18px 16px", marginTop:14 },
-  formGrid: { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:8, alignItems:"end" },
-  formLabel: { fontSize:10, color:"#64748b", marginBottom:4 },
-  input: { padding:"8px 10px", borderRadius:7, border:"1.5px solid #bfdbfe", background:"#fff", fontSize:12, color:"#0f172a", outline:"none", width:"100%", fontFamily:"inherit", boxSizing:"border-box" },
-  btnPrimary: { padding:"8px 18px", background:"#1d4ed8", color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSecondary: { padding:"8px 14px", background:"#fff", color:"#64748b", border:"1.5px solid #bfdbfe", borderRadius:8, fontSize:12, cursor:"pointer", fontFamily:"inherit" },
-  btnDel: { background:"none", border:"none", cursor:"pointer", color:"#cbd5e1", padding:"4px 6px", borderRadius:5, display:"flex", alignItems:"center", fontSize:16, lineHeight:1, transition:"all .15s" },
-  btnEdit: { background:"none", border:"none", cursor:"pointer", color:"#94a3b8", padding:"4px 6px", borderRadius:5, display:"flex", alignItems:"center", fontSize:14, lineHeight:1, transition:"all .15s" },
-  btnToggle: { display:"flex", alignItems:"center", gap:7, padding:"8px 16px", borderRadius:8, background:"#eff6ff", color:"#1d4ed8", border:"1.5px solid #bfdbfe", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  ganttHdr: (weeks: number) => ({ display:"grid", gridTemplateColumns:`200px repeat(${weeks},1fr)`, marginBottom:8 }),
+  ganttHdrCell: (active: boolean) => ({ textAlign:"center", fontSize:11, color: active?"var(--primary-700)":"var(--neutral-500)", padding:"8px 0", fontWeight: active?600:500, borderBottom:`2px solid ${active?"var(--primary-600)":"transparent"}` }),
+  ganttRowGrid: { display:"grid", gridTemplateColumns:"200px 1fr", alignItems:"center", gap:16, padding:"8px 0", borderBottom:"1px solid var(--border-light)" },
+  ganttTrack: (weeks: number) => ({ display:"grid", gridTemplateColumns:`repeat(${weeks},1fr)`, background:"var(--neutral-50)", borderRadius:4, height:32, position:"relative" }),
+  ganttBar: (c: string) => ({ position:"absolute", top:4, height:24, borderRadius:4, background:c, display:"flex", alignItems:"center", padding:"0 8px", fontSize:11, fontWeight:600, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", boxShadow:"0 1px 3px rgba(0,0,0,0.1)" }),
+  ganttLabelName: { fontSize:13, color:"var(--neutral-900)", fontWeight:500 },
+  ganttLabelSub: { fontSize:11, color:"var(--neutral-500)" },
+  th: { fontSize:12, color:"var(--neutral-600)", padding:"12px 16px", textAlign:"left", borderBottom:"1px solid var(--border-light)", fontWeight:600, background:"var(--neutral-50)" },
+  td: { padding:"12px 16px", fontSize:14, verticalAlign:"middle", borderBottom:"1px solid var(--border-light)", color:"var(--neutral-800)" },
+  tdId: { padding:"12px 16px", fontSize:13, color:"var(--primary-700)", fontWeight:600, borderBottom:"1px solid var(--border-light)", verticalAlign:"middle" },
+  tdRc: (ok: boolean) => ({ padding:"12px 16px", fontSize:12, fontWeight:600, color: ok?"var(--success)":"var(--danger)", borderBottom:"1px solid var(--border-light)", verticalAlign:"middle" }),
+  tePill: { display:"inline-block", padding:"3px 10px", background:"var(--neutral-100)", color:"var(--neutral-700)", borderRadius:6, fontSize:12, fontWeight:500 },
+  formWrap: { background:"#fff", border:"1px solid var(--border-light)", borderRadius:"var(--radius-md)", padding:"20px", marginTop:16, boxShadow:"var(--shadow-sm)" },
+  formGrid: { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:12, alignItems:"end" },
+  formLabel: { fontSize:12, color:"var(--neutral-700)", marginBottom:6, fontWeight:500 },
+  input: { padding:"10px 12px", borderRadius:6, border:"1px solid var(--border-light)", background:"#fff", fontSize:14, color:"var(--neutral-900)", outline:"none", width:"100%", transition:"border-color 0.2s" },
+  btnPrimary: { padding:"10px 20px", background:"var(--primary-600)", color:"#fff", border:"none", borderRadius:6, fontSize:14, fontWeight:600, cursor:"pointer", transition:"background 0.2s" },
+  btnSecondary: { padding:"10px 16px", background:"#fff", color:"var(--neutral-700)", border:"1px solid var(--border-light)", borderRadius:6, fontSize:13, fontWeight:500, cursor:"pointer", transition:"background 0.2s" },
+  btnDel: { background:"var(--danger-light)", border:"none", cursor:"pointer", color:"var(--danger)", padding:"6px 8px", borderRadius:6, display:"flex", alignItems:"center" },
+  btnEdit: { background:"var(--neutral-100)", border:"none", cursor:"pointer", color:"var(--neutral-600)", padding:"6px 8px", borderRadius:6, display:"flex", alignItems:"center" },
+  btnToggle: { display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:6, background:"#fff", color:"var(--primary-600)", border:"1px solid var(--border-light)", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"var(--shadow-xs)" },
   riskCard: (v: string) => {
-    const colors: any={high:{bg:"#fff5f5",bd:"#fecaca"},mid:{bg:"#fffbeb",bd:"#fde68a"},low:{bg:"#eff6ff",bd:"#bfdbfe"}}[v] || {bg:"#eff6ff",bd:"#bfdbfe"};
-    return { display:"flex", gap:14, alignItems:"flex-start", padding:16, borderRadius:10, marginBottom:12, background:colors.bg, border:`1.5px solid ${colors.bd}` };
+    const colors: any={high:{bg:"#fff",bd:"#fca5a5"},mid:{bg:"#fff",bd:"#fcd34d"},low:{bg:"#fff",bd:"var(--border-light)"}}[v] || {bg:"#fff",bd:"var(--border-light)"};
+    return { display:"flex", gap:16, alignItems:"flex-start", padding:"20px", borderRadius:"var(--radius-md)", marginBottom:16, background:colors.bg, border:`1px solid ${colors.bd}`, boxShadow:"var(--shadow-sm)" };
   },
   riskIcon: (v: string) => {
-    const c: any={high:"#dc2626",mid:"#d97706",low:"#1d4ed8"}[v] || "#1d4ed8";
-    return { flexShrink:0, width:36, height:36, borderRadius:8, background:`${c}18`, display:"flex", alignItems:"center", justifyContent:"center", color:c, fontSize:18 };
+    const c: any={high:"var(--danger)",mid:"var(--warning)",low:"var(--primary-600)"}[v] || "var(--primary-600)";
+    return { flexShrink:0, width:12, height:12, borderRadius:"50%", background:c, marginTop:4 };
   },
-  riskTitle: (v: string) => ({ fontSize:13, fontWeight:700, marginBottom:4, color:{high:"#991b1b",mid:"#92400e",low:"#1e3a8a"}[v] || "#1e3a8a" }),
+  riskTitle: (v: string) => ({ fontSize:15, fontWeight:600, marginBottom:8, color:"var(--neutral-900)" }),
   riskBadge: (v: string) => {
-    const s: any={high:{bg:"#fee2e2",c:"#991b1b"},mid:{bg:"#fef3c7",c:"#92400e"},low:{bg:"#dbeafe",c:"#1e3a8a"}}[v] || {bg:"#dbeafe",c:"#1e3a8a"};
-    return { display:"inline-block", padding:"1px 8px", borderRadius:4, fontSize:9, fontFamily:"monospace", fontWeight:700, letterSpacing:1, textTransform:"uppercase", background:s.bg, color:s.c, marginLeft:6 };
+    const s: any={high:{bg:"var(--danger-light)",c:"var(--danger)"},mid:{bg:"var(--warning-light)",c:"var(--warning)"},low:{bg:"var(--primary-50)",c:"var(--primary-700)"}}[v] || {bg:"var(--primary-50)",c:"var(--primary-700)"};
+    return { display:"inline-block", padding:"4px 10px", borderRadius:6, fontSize:10, fontWeight:700, letterSpacing:0.5, textTransform:"uppercase", background:s.bg, color:s.c, marginLeft:"auto" };
   },
-  riskDesc: { fontSize:12, color:"#334155", lineHeight:1.6 },
+  riskDesc: { fontSize:13, color:"var(--neutral-600)", lineHeight:1.6 },
 };
 
 function FlowDiagram({ svg }: { svg?: string }) {
@@ -336,6 +353,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
   const [projectForm, setProjectForm] = useState({
     name: data.name, businessObjective: data.businessObjective, projectType: data.projectType, status: data.status,
     kpiScope: data.kpiScope, kpiSchedule: data.kpiSchedule, kpiBudget: data.kpiBudget, kpiQuality: data.kpiQuality,
+    projectStartDate: data.projectStartDate,
     flowSvg: data.flowSvg || "", wbsSvg: data.wbsSvg || ""
   });
 
@@ -357,12 +375,26 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
   const [hoverTask, setHoverTask] = useState<number | null>(null);
   const [ganttEditTaskId, setGanttEditTaskId] = useState<string | null>(null);
   const [ganttEditForm, setGanttEditForm] = useState<{dur: string, pred: string, status: 'pending'|'in_progress'|'completed'}>({ dur: "", pred: "", status: "pending" });
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const pushLog = (action: string, detail: string, currentData: ProjectData = data): ProjectData => {
+    const newLog = {
+      action,
+      detail,
+      timestamp: new Date().toISOString()
+    };
+    return {
+      ...currentData,
+      changeLog: [...(currentData.changeLog || []), newLog]
+    };
+  };
 
   const WEEKS = Math.max(9, ...data.tasks.map(t => t.start + t.dur + 1));
   const CURRENT_WEEK = 2;
 
   const handleSaveProject = () => {
-    onUpdate({ ...data, ...projectForm, lastUpdated: new Date().toISOString() });
+    onUpdate(pushLog('Actualización General', 'Se modificaron datos generales del proyecto', { ...data, ...projectForm, lastUpdated: new Date().toISOString() }));
     setIsEditingProject(false);
   };
 
@@ -386,13 +418,15 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
     };
     
     let newTasks = [...data.tasks];
+    let actionName = 'Nueva Tarea';
     if (editIndex.type === 'task' && editIndex.idx !== null) {
       newTasks[editIndex.idx] = newTask;
+      actionName = 'Tarea Actualizada';
     } else {
       newTasks.push(newTask);
     }
     
-    onUpdate({ ...data, tasks: newTasks });
+    onUpdate(pushLog(actionName, `Se actualizó la tarea ${newTask.id} (${newTask.name})`, { ...data, tasks: newTasks }));
     setTaskForm({ id:"", name:"", om:"", p:"", te:"", pred:"", rec:"", rc:"SÍ", dur:"", status:"pending" });
     setShowTaskForm(false);
     setEditIndex({type: '', idx: null});
@@ -406,7 +440,8 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
   };
 
   const handleDeleteTask = (idx: number) => {
-    onUpdate({ ...data, tasks: data.tasks.filter((_, i) => i !== idx) });
+    const deletedId = data.tasks[idx].id;
+    onUpdate(pushLog('Tarea Eliminada', `Se eliminó la tarea ${deletedId}`, { ...data, tasks: data.tasks.filter((_, i) => i !== idx) }));
   };
 
   const handleAddMs = () => {
@@ -448,9 +483,14 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
   const handleAddRisk = () => {
     if (!riskForm.id || !riskForm.title) return;
     let newArr = [...data.risks];
-    if (editIndex.type === 'risk' && editIndex.idx !== null) newArr[editIndex.idx] = riskForm as Risk;
-    else newArr.push(riskForm as Risk);
-    onUpdate({ ...data, risks: newArr });
+    let actionName = 'Nuevo Riesgo';
+    if (editIndex.type === 'risk' && editIndex.idx !== null) {
+      newArr[editIndex.idx] = riskForm as Risk;
+      actionName = 'Riesgo Actualizado';
+    } else {
+      newArr.push(riskForm as Risk);
+    }
+    onUpdate(pushLog(actionName, `Riesgo: ${riskForm.title}`, { ...data, risks: newArr }));
     setRiskForm({ v:"low", id:"", title:"", badge:"Bajo", desc:"" });
     setShowRiskForm(false);
     setEditIndex({type: '', idx: null});
@@ -459,8 +499,11 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
 
   const tabs = [
     { id:"overview",  icon:"⊞", label:"Overview" },
+    { id:"edt",       icon:"🌳", label:"EDT" },
     { id:"gantt",     icon:"▬", label:"Gantt" },
+    { id:"asesor",    icon:"🧠", label:"Asesor" },
     { id:"flow",      icon:"◎", label:"Flow" },
+    { id:"resources", icon:"👥", label:"Recursos" },
     { id:"tasks",     icon:"≡", label:"Tasks" },
     { id:"risks",     icon:"⚠", label:"Risks" },
   ];
@@ -470,8 +513,14 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
       <aside style={S.sidebar}>
         <div style={S.logoBox}>
           <div style={S.logoTitle}>
-            <div style={{ width:32,height:32,borderRadius:8,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>📋</div>
-            PM Cop.net
+            <div style={S.logoIcon}>
+              {/* Payway P logo mock */}
+              <svg viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h8a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4H4z" />
+                <path d="M12 12h4a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4H4" />
+              </svg>
+            </div>
+            Payway
           </div>
           <div style={S.logoSub}>{data.projectType || "Gestión de Proyecto"}</div>
         </div>
@@ -479,8 +528,8 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
           <div style={S.navLabel}>Vistas</div>
           {tabs.map(t => (
             <button key={t.id} style={S.navItem(activeTab===t.id)} onClick={()=>setActiveTab(t.id)}>
-              <span style={{fontSize:14,opacity:.9}}>{t.icon}</span>{t.label}
-              {t.id==="tasks" && <span style={{marginLeft:"auto",background:"rgba(255,255,255,0.2)",borderRadius:10,padding:"1px 7px",fontSize:9,fontFamily:"monospace"}}>{data.tasks.length}</span>}
+              <span style={{fontSize:16,opacity:(activeTab===t.id ? 1 : 0.7)}}>{t.icon}</span>{t.label}
+              {t.id==="tasks" && <span style={{marginLeft:"auto",background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"2px 8px",fontSize:11,fontWeight:600}}>{data.tasks.length}</span>}
             </button>
           ))}
         </div>
@@ -491,83 +540,126 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
           </div>
           <div>Actualizado: {new Date(data.lastUpdated).toLocaleDateString()}</div>
         </div>
+
+        {/* Change Log Timeline */}
+        {data.changeLog && data.changeLog.length > 0 && (
+          <div style={{...S.card, margin: 24, padding: 16 }}>
+            <div style={{fontSize: 12, fontWeight: 700, color: "var(--neutral-800)", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5}}>Historial Reciente</div>
+            <div style={{display: "flex", flexDirection: "column", gap: 12}}>
+              {[...data.changeLog].reverse().slice(0, 5).map((log, i) => (
+                <div key={i} style={{display: "flex", gap: 8}}>
+                  <div style={{marginTop: 4, width: 6, height: 6, borderRadius: "50%", background: "var(--primary-400)", flexShrink: 0}} />
+                  <div>
+                    <div style={{fontSize: 11, fontWeight: 600, color: "var(--neutral-700)"}}>{log.action}</div>
+                    <div style={{fontSize: 10, color: "var(--neutral-500)", marginTop: 2}}>{log.detail}</div>
+                    <div style={{fontSize: 9, color: "var(--neutral-400)", fontFamily: "'JetBrains Mono', monospace", marginTop: 4}}>
+                      {new Date(log.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </aside>
 
       <main style={S.main}>
-        <div style={S.hdrWrap}>
-          {isEditingProject ? (
-            <div style={{flex: 1, marginRight: 20}}>
-              <input style={{...S.input, fontSize: 24, fontWeight: 700, marginBottom: 8}} value={projectForm.name} onChange={e=>setProjectForm({...projectForm, name: e.target.value})} placeholder="Nombre del Proyecto" />
-              <input style={S.input} value={projectForm.businessObjective} onChange={e=>setProjectForm({...projectForm, businessObjective: e.target.value})} placeholder="Objetivo de Negocio" />
-            </div>
-          ) : (
-            <div>
-              <h1 style={S.hdrH1}>{data.name || "Proyecto Sin Nombre"}</h1>
-              <p style={S.hdrSub}>{data.businessObjective || "Sin objetivo definido"}</p>
-            </div>
-          )}
+        <header style={S.hdrWrap}>
+          <div style={S.hdrLeft}>
+            {isEditingProject ? (
+              <div style={{display: 'flex', gap: 12, alignItems: 'center'}}>
+                <input style={{...S.input, width: 200, fontSize: 16, fontWeight: 600}} value={projectForm.name} onChange={e=>setProjectForm({...projectForm, name: e.target.value})} placeholder="Nombre del Proyecto" />
+                <input style={{...S.input, width: 200}} value={projectForm.businessObjective} onChange={e=>setProjectForm({...projectForm, businessObjective: e.target.value})} placeholder="Objetivo de Negocio" />
+                <div style={{display: "flex", alignItems: "center", gap: 8}}>
+                  <span style={{fontSize: 13, color: "var(--neutral-600)", fontWeight: 500}}>Inicio:</span>
+                  <input type="date" style={{...S.input, width: "auto", padding: "8px 12px"}} value={projectForm.projectStartDate} onChange={e=>setProjectForm({...projectForm, projectStartDate: e.target.value})} />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h1 style={S.hdrH1}>PM Copilot</h1>
+              </div>
+            )}
+          </div>
           <div style={S.badgeRow}>
             {isEditingProject ? (
-              <button onClick={handleSaveProject} style={{...S.btnPrimary, display: "flex", alignItems: "center", gap: 4}}><Check size={14}/> Guardar</button>
+              <button onClick={handleSaveProject} style={{...S.btnPrimary, display: "flex", alignItems: "center", gap: 6}}><Check size={16}/> Guardar</button>
             ) : (
-              <button onClick={()=>{
-                setProjectForm({
-                  name: data.name, businessObjective: data.businessObjective, projectType: data.projectType, status: data.status,
-                  kpiScope: data.kpiScope, kpiSchedule: data.kpiSchedule, kpiBudget: data.kpiBudget, kpiQuality: data.kpiQuality,
-                  flowSvg: data.flowSvg || "", wbsSvg: data.wbsSvg || ""
-                });
-                setIsEditingProject(true);
-              }} style={{...S.btnSecondary, display: "flex", alignItems: "center", gap: 4}}><Edit2 size={14}/> Editar Info</button>
+              // Empty space for layout balance, edit form is handled mostly via sub-sections if needed. 
+              <div style={{display: 'flex', gap: 24, alignItems: 'center', color: 'var(--neutral-700)', fontSize: 14, fontWeight: 500}}>
+                <button onClick={onSync} disabled={isSyncing} style={{background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:6, color:'var(--neutral-700)', fontWeight:500, fontSize:14}}>
+                  <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} /> {isSyncing ? 'Sincronizando...' : 'Chat'}
+                </button>
+                <div style={{color: 'var(--primary-600)', fontWeight: 600, cursor: 'pointer'}}>Dashboard</div>
+                <div style={{color: 'var(--neutral-900)'}}>demo@pmcopilot.com</div>
+                <div style={{width: 32, height: 32, borderRadius: 16, background: 'var(--neutral-200)'}}></div>
+              </div>
             )}
-            <button onClick={onSync} disabled={isSyncing} style={{...S.badge("blue"), cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", border: "1px solid #93c5fd", background: "#eff6ff"}}>
-              <RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} />
-              {isSyncing ? "Sincronizando..." : "Sincronizar Chat"}
-            </button>
+          </div>
+        </header>
+
+        {/* Tab Header specific content */}
+        <div style={{padding: '0 32px 0'}}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-light)', paddingTop: 16 }}>
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: 0 }}>
+              {tabs.map(t => (
+                <button 
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  style={{
+                    padding: '12px 20px', fontSize: 14, fontWeight: activeTab === t.id ? 600 : 500,
+                    color: activeTab === t.id ? 'var(--primary-600)' : 'var(--neutral-500)',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: activeTab === t.id ? '2px solid var(--primary-600)' : '2px solid transparent',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    transition: 'all 0.2s',
+                    marginBottom: '-1px'
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>{t.icon}</span> {t.label}
+                </button>
+              ))}
+            </div>
+            
+            <div style={{ display: 'flex', gap: 8, paddingBottom: 12 }}>
+              <button onClick={() => setShowFileUpload(true)} style={{...S.btnSecondary, padding: '8px 14px', fontSize: 13, display: "flex", alignItems: "center", gap: "6px"}}>
+                <Upload size={14} /> Importar
+              </button>
+              <div style={{position: 'relative'}}>
+                <button 
+                  onClick={() => setShowExportMenu(!showExportMenu)} 
+                  style={{...S.btnSecondary, padding: '8px 14px', fontSize: 13, display: "flex", alignItems: "center", gap: "6px"}}>
+                  <Upload size={14} style={{transform: "rotate(180deg)"}}/> Exportar ▾
+                </button>
+                {showExportMenu && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', 
+                    border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', 
+                    boxShadow: 'var(--shadow-lg)', zIndex: 100, minWidth: 180, overflow: 'hidden'
+                  }}>
+                    <button onClick={() => { exportToJiraCSV(data); setShowExportMenu(false); }} style={{width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer', fontSize: 13, color: 'var(--neutral-700)'}} className="hover:bg-slate-50">
+                      Exportar a Jira (CSV)
+                    </button>
+                    <button onClick={() => { exportToICS(data); setShowExportMenu(false); }} style={{width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer', fontSize: 13, color: 'var(--neutral-700)'}} className="hover:bg-slate-50">
+                      Exportar Calendario (.ics)
+                    </button>
+                    <button onClick={() => { window.print(); setShowExportMenu(false); }} style={{width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--neutral-700)'}} className="hover:bg-slate-50">
+                      Exportar a PDF
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Horizontal Navigation Tabs */}
-        <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #e2e8f0', marginBottom: '24px', marginTop: '16px', overflowX: 'auto' }}>
-          {tabs.map(t => (
-            <button 
-              key={t.id} 
-              onClick={() => setActiveTab(t.id)}
-              style={{
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === t.id ? '2px solid #1d4ed8' : '2px solid transparent',
-                padding: '8px 4px',
-                fontSize: '14px',
-                fontWeight: activeTab === t.id ? 600 : 500,
-                color: activeTab === t.id ? '#1d4ed8' : '#64748b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <span style={{ fontSize: '16px' }}>{t.icon}</span>
-              {t.label}
-              {t.id === "tasks" && (
-                <span style={{
-                  background: activeTab === t.id ? '#eff6ff' : '#f1f5f9',
-                  color: activeTab === t.id ? '#1d4ed8' : '#64748b',
-                  borderRadius: '10px',
-                  padding: '2px 8px',
-                  fontSize: '10px',
-                  fontFamily: 'monospace',
-                  fontWeight: 700
-                }}>
-                  {data.tasks.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        <div style={{flex: 1, padding: "24px 32px 32px", overflowY: "auto"}}>
 
         {activeTab==="overview" && <>
+          <ProjectHealth data={data} onUpdate={onUpdate} />
+          <BurndownChart data={data} />
           <div style={S.kpiGrid}>
             {[
               { tag:"Scope Health", key: "kpiScope", val: data.kpiScope || "N/A", c:"#059669", ico:"✓" },
@@ -610,7 +702,9 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
               </div>
             )}
             <div style={S.msRow}>
-              {data.milestones.length === 0 && <span style={{fontSize:12, color:"#94a3b8"}}>No hay hitos definidos.</span>}
+              {data.milestones.length === 0 && (
+                <div style={{width: "100%", textAlign:"center",padding:40,background:"var(--neutral-50)",borderRadius:8,border:"1px dashed var(--border-light)"}}><div style={{fontSize: 24, marginBottom: 8}}>🚩</div><h4 style={{fontSize: 14, fontWeight: 600, color: "var(--neutral-900)", marginBottom: 4}}>Sin hitos</h4><p style={{fontSize: 12, color: "var(--neutral-500)", marginBottom: 16}}>Marca los momentos clave del proyecto.</p><button onClick={()=>{setShowMsForm(true); setEditIndex({type:'', idx:null});}} className="btn btn-primary btn-sm">+ Agregar Hito</button></div>
+              )}
               {data.milestones.map((m,i,arr) => (
                 <div key={i} style={S.msItem} className="group">
                   {i < arr.length-1 && <div style={{...S.msLine(m.s), background: m.s==="done"?"#059669":m.s==="active"?"linear-gradient(90deg,#059669,#3b82f6)":"#e2e8f0"}}/>}
@@ -642,7 +736,9 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
                   </div>
                 </div>
               )}
-              {data.oeps.length === 0 && <span style={{fontSize:12, color:"#94a3b8"}}>No hay objetivos definidos.</span>}
+              {data.oeps.length === 0 && (
+                <div style={{textAlign:"center",padding:40,background:"var(--neutral-50)",borderRadius:8,border:"1px dashed var(--border-light)"}}><div style={{fontSize: 24, marginBottom: 8}}>🎯</div><h4 style={{fontSize: 14, fontWeight: 600, color: "var(--neutral-900)", marginBottom: 4}}>Sin objetivos</h4><p style={{fontSize: 12, color: "var(--neutral-500)", marginBottom: 16}}>Define OEPs para medir el éxito.</p><button onClick={()=>{setShowOepForm(true); setEditIndex({type:'', idx:null});}} className="btn btn-primary btn-sm">+ Agregar OEP</button></div>
+              )}
               {data.oeps.map((o,i) => (
                 <div key={i} style={{...S.oepItem, marginBottom: i===data.oeps.length-1?0:10}} className="group relative">
                   <div style={S.oepId}>{o.id}</div>
@@ -675,7 +771,9 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
                   </div>
                 </div>
               )}
-              {data.activities.length === 0 && <span style={{fontSize:12, color:"#94a3b8"}}>No hay actividades próximas.</span>}
+              {data.activities.length === 0 && (
+                <div style={{textAlign:"center",padding:40,background:"var(--neutral-50)",borderRadius:8,border:"1px dashed var(--border-light)"}}><div style={{fontSize: 24, marginBottom: 8}}>📅</div><h4 style={{fontSize: 14, fontWeight: 600, color: "var(--neutral-900)", marginBottom: 4}}>Calendario libre</h4><p style={{fontSize: 12, color: "var(--neutral-500)", marginBottom: 16}}>No tienes actividades próximas asignadas.</p><button onClick={()=>{setShowActForm(true); setEditIndex({type:'', idx:null});}} className="btn btn-primary btn-sm">+ Nueva Actividad</button></div>
+              )}
               {data.activities.map((a,i,arr) => (
                 <div key={i} style={{...S.actItem, borderBottom: i===arr.length-1?"none":undefined}} className="group">
                   <div><div style={S.actName}>{a.n}</div><div style={S.actResp}>{a.r}</div></div>
@@ -691,219 +789,24 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
           </div>
         </>}
 
-        {activeTab==="gantt" && (() => {
-          const cpmTasks = calculateCPM(data.tasks);
-          const projectDuration = Math.max(10, ...cpmTasks.map(t => t.EF));
-          const TOTAL_UNITS = Math.ceil(projectDuration) + 2; // Add some padding
-          const UNIT_WIDTH = 30; // pixels per hour/unit
-          
-          // Sort tasks: Critical path first, then by ES, then by ID
-          const sortedTasks = [...cpmTasks].sort((a, b) => {
-            if (a.ES !== b.ES) return a.ES - b.ES;
-            if (a.totalSlack !== b.totalSlack) return a.totalSlack - b.totalSlack;
-            return a.id.localeCompare(b.id);
-          });
+        {activeTab==="gantt" && (
+          <GanttChart
+            tasks={data.tasks}
+            projectStartDate={data.projectStartDate}
+            onUpdateTasks={(newTasks) => onUpdate({ ...data, tasks: newTasks })}
+          />
+        )}
 
-          return (
-            <div style={{...S.card, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '600px'}}>
-              <div style={{padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                <div style={{...S.sectionTitle, marginBottom: 0}}>Gantt & Ruta Crítica (Horas)<div style={S.divider}/></div>
-                <div style={{display: 'flex', gap: '12px', fontSize: '11px', fontWeight: 500, color: '#64748b'}}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}><div style={{width: 12, height: 12, borderRadius: 2, background: '#ef4444'}}></div>Crítica</div>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}><div style={{width: 12, height: 12, borderRadius: 2, background: '#3b82f6'}}></div>Normal</div>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}><div style={{width: 12, height: 12, borderRadius: 2, background: '#eab308'}}></div>En curso</div>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}><div style={{width: 12, height: 12, borderRadius: 2, background: '#22c55e'}}></div>Completado</div>
-                </div>
-              </div>
-              
-              <div style={{display: 'flex', flex: 1, overflow: 'hidden'}}>
-                {/* Left side: Table */}
-                <div style={{width: '520px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', background: '#fff', flexShrink: 0}}>
-                  <div style={{display: 'flex', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 600, fontSize: '11px', color: '#64748b'}}>
-                    <div style={{padding: '8px', width: '40px', borderRight: '1px solid #e2e8f0', textAlign: 'center'}}>ID</div>
-                    <div style={{padding: '8px', flex: 1, borderRight: '1px solid #e2e8f0'}}>Nombre</div>
-                    <div style={{padding: '8px', width: '50px', borderRight: '1px solid #e2e8f0', textAlign: 'center'}}>Dur.</div>
-                    <div style={{padding: '8px', width: '60px', borderRight: '1px solid #e2e8f0', textAlign: 'center'}}>Holgura</div>
-                    <div style={{padding: '8px', width: '100px', borderRight: '1px solid #e2e8f0', textAlign: 'center'}}>Inicio</div>
-                    <div style={{padding: '8px', width: '100px', textAlign: 'center'}}>Fin</div>
-                  </div>
-                  <div style={{overflowY: 'auto', flex: 1}}>
-                    {sortedTasks.map(t => (
-                      <div key={t.id} style={{display: 'flex', borderBottom: '1px solid #f1f5f9', fontSize: '12px', alignItems: 'center', background: t.isCritical ? '#fef2f2' : '#fff', height: '33px'}}>
-                        <div style={{padding: '0 8px', width: '40px', borderRight: '1px solid #f1f5f9', textAlign: 'center', fontWeight: 600, color: '#1d4ed8'}}>{t.id}</div>
-                        <div style={{padding: '0 8px', flex: 1, borderRight: '1px solid #f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={t.name}>{t.name}</div>
-                        <div style={{padding: '0 8px', width: '50px', borderRight: '1px solid #f1f5f9', textAlign: 'center'}}>{formatDuration(t.dur)}</div>
-                        <div style={{padding: '0 8px', width: '60px', borderRight: '1px solid #f1f5f9', textAlign: 'center', color: t.totalSlack <= 0 ? '#ef4444' : '#64748b', fontWeight: t.totalSlack <= 0 ? 700 : 400}}>{formatDuration(t.totalSlack)}</div>
-                        <div style={{padding: '0 8px', width: '100px', borderRight: '1px solid #f1f5f9', textAlign: 'center', fontSize: '10px'}}>{formatDate(getWorkingDate(t.ES))}</div>
-                        <div style={{padding: '0 8px', width: '100px', textAlign: 'center', fontSize: '10px'}}>{formatDate(getWorkingDate(t.EF))}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+        {activeTab==="asesor" && (
+          <PMAdvisor
+            data={data}
+            onUpdate={onUpdate}
+          />
+        )}
 
-                {/* Right side: Gantt Chart */}
-                <div style={{flex: 1, overflow: 'auto', background: '#fff', position: 'relative'}}>
-                  <div style={{display: 'flex', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10}}>
-                    {Array.from({length: TOTAL_UNITS}, (_, i) => (
-                      <div key={i} style={{minWidth: `${UNIT_WIDTH}px`, padding: '8px 0', textAlign: 'center', fontSize: '10px', color: '#64748b', borderRight: '1px solid #e2e8f0'}}>
-                        {i}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{position: 'relative', paddingTop: '8px'}}>
-                    {/* Background grid */}
-                    <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', pointerEvents: 'none'}}>
-                      {Array.from({length: TOTAL_UNITS}, (_, i) => (
-                        <div key={i} style={{minWidth: `${UNIT_WIDTH}px`, borderRight: '1px solid #f1f5f9'}} />
-                      ))}
-                    </div>
-                    
-                    {/* Task bars */}
-                    {sortedTasks.map((t, i) => {
-                      const top = i * 33 + 4; // 33px per row
-                      const left = t.ES * UNIT_WIDTH;
-                      const width = t.dur * UNIT_WIDTH;
-                      const slackWidth = t.totalSlack * UNIT_WIDTH;
-                      
-                      return (
-                        <div key={t.id} style={{position: 'absolute', top, left: 0, height: '24px', width: '100%'}}>
-                          {/* Slack line (accordion) */}
-                          {t.totalSlack > 0 && (
-                            <div style={{
-                              position: 'absolute', 
-                              left: left + width, 
-                              width: slackWidth, 
-                              top: '11px', 
-                              height: '4px', 
-                              background: '#cbd5e1',
-                              borderBottom: '2px solid #94a3b8',
-                              opacity: 0.6
-                            }} title={`Holgura: ${formatDuration(t.totalSlack)}`} />
-                          )}
-                          
-                          {/* Task bar */}
-                          <div 
-                            onClick={() => {
-                              setGanttEditTaskId(t.id);
-                              setGanttEditForm({ dur: String(t.dur), pred: t.pred, status: t.status || "pending" });
-                            }}
-                            style={{
-                            position: 'absolute',
-                            left,
-                            width: Math.max(width, 4), // min width
-                            height: '16px',
-                            top: '4px',
-                            background: t.status === 'completed' ? '#22c55e' : t.status === 'in_progress' ? '#eab308' : t.isCritical ? '#ef4444' : '#3b82f6',
-                            borderRadius: '2px',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: '0 4px',
-                            fontSize: '9px',
-                            color: '#fff',
-                            overflow: 'hidden',
-                            whiteSpace: 'nowrap',
-                            zIndex: 2,
-                            cursor: 'pointer'
-                          }}>
-                            {t.dur > 1 ? t.name : ''}
-                          </div>
-                          
-                          {ganttEditTaskId === t.id && (
-                            <div style={{
-                              position: 'absolute',
-                              left: left,
-                              top: '24px',
-                              background: '#fff',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '4px',
-                              padding: '8px',
-                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                              zIndex: 100,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '8px',
-                              width: '200px'
-                            }}>
-                              <div style={{fontSize: 10, fontWeight: 600, color: '#1e293b'}}>Editar Tarea {t.id}</div>
-                              <div>
-                                <div style={{fontSize: 9, color: '#64748b', marginBottom: 2}}>Duración (h)</div>
-                                <input style={{...S.input, padding: '2px 4px', fontSize: 10}} type="number" value={ganttEditForm.dur} onChange={e => setGanttEditForm({...ganttEditForm, dur: e.target.value})} />
-                              </div>
-                              <div>
-                                <div style={{fontSize: 9, color: '#64748b', marginBottom: 2}}>Predecesoras</div>
-                                <input style={{...S.input, padding: '2px 4px', fontSize: 10}} value={ganttEditForm.pred} onChange={e => setGanttEditForm({...ganttEditForm, pred: e.target.value})} />
-                              </div>
-                              <div>
-                                <div style={{fontSize: 9, color: '#64748b', marginBottom: 2}}>Estado</div>
-                                <select style={{...S.input, padding: '2px 4px', fontSize: 10}} value={ganttEditForm.status} onChange={e => setGanttEditForm({...ganttEditForm, status: e.target.value as any})}>
-                                  <option value="pending">Pendiente</option>
-                                  <option value="in_progress">En curso</option>
-                                  <option value="completed">Completado</option>
-                                </select>
-                              </div>
-                              <div style={{display: 'flex', gap: '4px', marginTop: '4px'}}>
-                                <button style={{...S.btnPrimary, padding: '2px 6px', fontSize: 10}} onClick={() => {
-                                  const newTasks = data.tasks.map(task => {
-                                    if (task.id === t.id) {
-                                      return { ...task, dur: parseInt(ganttEditForm.dur) || 1, pred: ganttEditForm.pred, status: ganttEditForm.status };
-                                    }
-                                    return task;
-                                  });
-                                  onUpdate({ ...data, tasks: newTasks });
-                                  setGanttEditTaskId(null);
-                                }}>Guardar</button>
-                                <button style={{...S.btnSecondary, padding: '2px 6px', fontSize: 10}} onClick={() => setGanttEditTaskId(null)}>Cancelar</button>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Dependencies arrows */}
-                          {t.succs.map((succ: any) => {
-                            const succId = succ.id;
-                            const succTask = sortedTasks.find(s => s.id === succId);
-                            if (!succTask) return null;
-                            const succIndex = sortedTasks.findIndex(s => s.id === succId);
-                            const succTop = succIndex * 33 + 4 + 8;
-                            const startX = left + width;
-                            const startY = top + 12;
-                            const endX = succTask.ES * UNIT_WIDTH;
-                            const endY = succTop;
-                            
-                            // Draw simple SVG line
-                            return (
-                              <svg key={`${t.id}-${succId}`} style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible'}}>
-                                <path 
-                                  d={`M ${startX} ${startY} L ${startX + 5} ${startY} L ${startX + 5} ${endY} L ${endX} ${endY}`} 
-                                  fill="none" 
-                                  stroke={t.isCritical && succTask.isCritical ? '#ef4444' : '#94a3b8'} 
-                                  strokeWidth="1.5"
-                                  markerEnd="url(#arrowhead)"
-                                />
-                              </svg>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                    
-                    {/* SVG Definitions for arrows */}
-                    <svg style={{width: 0, height: 0, position: 'absolute'}}>
-                      <defs>
-                        <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
-                          <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
-                        </marker>
-                      </defs>
-                    </svg>
-                    
-                    {/* Spacer to ensure scrollability */}
-                    <div style={{height: `${sortedTasks.length * 33 + 20}px`}} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {activeTab==="resources" && (
+          <ResourceAllocation data={data} />
+        )}
 
         {activeTab==="flow" && <>
           <div style={S.card}>
@@ -918,13 +821,18 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
           <div style={S.card}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
               <div style={{...S.sectionTitle, marginBottom:0}}>WBS · Estructura de Desglose del Trabajo<div style={S.divider}/></div>
-              {isEditingProject && <span style={{fontSize:11, color:"#1d4ed8"}}>Editando SVG...</span>}
             </div>
-            {isEditingProject ? (
-              <textarea style={{...S.input, height: 200, fontFamily: "monospace", fontSize: 11, background: "#f8fafc"}} value={projectForm.wbsSvg} onChange={e=>setProjectForm({...projectForm, wbsSvg: e.target.value})} placeholder="<svg>...</svg>" />
-            ) : <WBSDiagram svg={data.wbsSvg} />}
+            <WBSChart nodes={data.wbsNodes || []} />
           </div>
         </>}
+
+        {activeTab==="edt" && (
+          <WBSEditor
+            nodes={data.wbsNodes || []}
+            projectName={data.name}
+            onChange={(newNodes) => onUpdate({ ...data, wbsNodes: newNodes })}
+          />
+        )}
 
         {activeTab==="tasks" && (
           <div style={S.card}>
@@ -961,7 +869,7 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
               </div>
             )}
             {data.tasks.length===0 ? (
-              <div style={{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}}>No hay tareas. Usá el botón <strong>"Nueva Tarea"</strong> para agregar.</div>
+              <div style={{textAlign:"center",padding:40,background:"var(--neutral-50)",borderRadius:8,border:"1px dashed var(--border-light)"}}><div style={{fontSize: 24, marginBottom: 8}}>📂</div><h4 style={{fontSize: 14, fontWeight: 600, color: "var(--neutral-900)", marginBottom: 4}}>No hay tareas</h4><p style={{fontSize: 12, color: "var(--neutral-500)", marginBottom: 16}}>Aún no se han definido tareas para el proyecto.</p><button onClick={()=>{setShowTaskForm(true); setEditIndex({type:'', idx:null});}} className="btn btn-primary btn-sm">+ Crear Tarea</button></div>
             ) : (
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",minWidth:700}}>
@@ -1022,7 +930,9 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
                 </div>
               </div>
             )}
-            {data.risks.length === 0 && <span style={{fontSize:12, color:"#94a3b8"}}>No hay riesgos registrados.</span>}
+            {data.risks.length === 0 && (
+              <div style={{textAlign:"center",padding:40,background:"var(--neutral-50)",borderRadius:8,border:"1px dashed var(--border-light)"}}><div style={{fontSize: 24, marginBottom: 8}}>🛡️</div><h4 style={{fontSize: 14, fontWeight: 600, color: "var(--neutral-900)", marginBottom: 4}}>No hay riesgos registrados</h4><p style={{fontSize: 12, color: "var(--neutral-500)", marginBottom: 16}}>Identifica posibles amenazas para mitigarlas a tiempo.</p><button onClick={()=>{setShowRiskForm(true); setEditIndex({type:'', idx:null});}} className="btn btn-primary btn-sm">+ Identificar Riesgo</button></div>
+            )}
             {data.risks.map((r,i) => (
               <div key={i} style={S.riskCard(r.v)} className="group relative">
                 <div style={S.riskIcon(r.v)}>{r.v==="high"?"🔴":r.v==="mid"?"🟡":"🔵"}</div>
@@ -1038,8 +948,24 @@ export default function ProjectDashboard({ data, onUpdate, onSync, isSyncing }: 
             ))}
           </div>
         )}
+        </div>
       </main>
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} } button:hover { opacity:.9; }`}</style>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} } 
+        button:hover { opacity:.9; }
+        @media print {
+          nav, .btn, button, .tabs, .header-buttons { display: none !important; }
+          main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+          .card { border: none !important; box-shadow: none !important; padding: 0 !important; margin-bottom: 20px !important; }
+        }
+      `}</style>
+      {showFileUpload && (
+        <FileUploadProcessor
+          data={data}
+          onUpdate={(newData) => { onUpdate(newData); setShowFileUpload(false); }}
+          onClose={() => setShowFileUpload(false)}
+        />
+      )}
     </div>
   );
 }

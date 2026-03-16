@@ -7,6 +7,8 @@ export class PMChatService {
   constructor(history?: ChatMessage[]) {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     
+    console.log('[PMChatService] API Key loaded:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
+    
     if (!apiKey || apiKey === 'AI Studio Free Tier') {
       throw new Error("Por favor, configura una API Key válida en las variables de entorno (VITE_GEMINI_API_KEY).");
     }
@@ -49,15 +51,21 @@ Comando de inicio: Recibirás los datos iniciales del proyecto. Preséntate brev
 `;
 
     const formattedHistory = history ? history.map(m => ({
-      role: m.role === 'model' || m.role === 'assistant' ? 'model' : 'user',
+      role: (m.role === 'model' ? 'model' : 'user') as 'user' | 'model',
       parts: [{ text: m.content }]
     })) : undefined;
 
     this.chat = ai.chats.create({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.7,
+        thinkingConfig: {
+          thinkingBudget: 2048
+        },
+        httpOptions: {
+          timeout: 120000
+        }
       },
       history: formattedHistory
     });
@@ -67,9 +75,12 @@ Comando de inicio: Recibirás los datos iniciales del proyecto. Preséntate brev
     try {
       const response = await this.chat.sendMessage({ message });
       return response.text || "Lo siento, no pude generar una respuesta.";
-    } catch (error) {
-      console.error("Error al comunicarse con Gemini:", error);
-      throw new Error("Error de conexión con el asistente.");
+    } catch (error: any) {
+      console.error("Error COMPLETO de Gemini:", error);
+      console.error("Error message:", error?.message);
+      console.error("Error status:", error?.status);
+      console.error("Error details:", JSON.stringify(error, null, 2));
+      throw new Error(`Error de conexión con el asistente: ${error?.message || 'desconocido'}`);
     }
   }
 }
@@ -114,7 +125,7 @@ ${chatHistory}
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -166,5 +177,100 @@ ${chatHistory}
     console.error("Error extrayendo datos para el dashboard:", error);
     throw new Error("No se pudo sincronizar el dashboard con el chat.");
   }
+}
+
+export async function generateProjectFromFileData(extractedText: string, fileType: string): Promise<any> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'AI Studio Free Tier') {
+    throw new Error("API Key no configurada");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = `Eres un PM Senior. Te doy el contenido extraído de un archivo (${fileType === 'excel' ? 'Excel' : fileType === 'pptx' ? 'PowerPoint' : 'CSV'}) de un proyecto.
+Tu trabajo es analizar TODO el contenido e interpretar la información para generar una estructura completa de proyecto.
+
+CONTENIDO DEL ARCHIVO:
+${extractedText.substring(0, 12000)}
+
+Devolvé EXCLUSIVAMENTE un JSON válido (sin markdown, sin backticks, solo JSON puro) con esta estructura:
+
+{
+  "name": "Nombre del proyecto",
+  "businessObjective": "Objetivo de negocio interpretado",
+  "projectType": "Tipo de proyecto",
+  "status": "Planificación",
+  "tasks": [
+    {"id": "T1", "name": "Nombre tarea", "dur": 8, "pred": "-", "rec": "Recurso", "status": "pending"}
+  ],
+  "risks": [
+    {"id": "R1", "title": "Título", "v": "high|mid|low", "badge": "Alto|Medio|Bajo", "desc": "Descripción y mitigación"}
+  ],
+  "milestones": [
+    {"n": "Nombre hito", "w": "Sem 1", "s": "pending"}
+  ],
+  "wbsNodes": [
+    {
+      "id": "1",
+      "name": "Nombre fase",
+      "level": 1,
+      "children": [
+        {"id": "1.1", "name": "Entregable", "level": 2, "children": [
+          {"id": "1.1.1", "name": "Paquete de trabajo", "level": 3, "children": []}
+        ]}
+      ]
+    }
+  ],
+  "oeps": [
+    {"id": "OP1", "n": "Objetivo", "kpi": "KPI medible"}
+  ],
+  "activities": [
+    {"n": "Actividad", "r": "Responsable", "d": "Fecha/Día", "s": "pend"}
+  ],
+  "kpiScope": "Valor o N/A",
+  "kpiSchedule": "Valor o N/A",
+  "kpiBudget": "Valor o N/A",
+  "kpiQuality": "Valor o N/A"
+}
+
+REGLAS:
+- Generá al menos 5-10 tareas con dependencias lógicas (pred) usando IDs tipo "T1", "T2", etc.
+- Las dependencias deben ser como "T1", "T2,T3", etc. La primera tarea sin predecesora usa "-".
+- La duración (dur) debe estar en HORAS. Un día = 8h.
+- Generá una EDT (wbsNodes) con al menos 2-3 fases y sub-items.
+- Identificá al menos 2-3 riesgos del proyecto.
+- NO incluyas texto fuera del JSON. SOLO JSON puro.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: {
+      temperature: 0.3,
+      thinkingConfig: { thinkingBudget: 4096 },
+      httpOptions: { timeout: 120000 },
+    }
+  });
+
+  const responseText = response.text || '';
+
+  // Extract JSON from response (handle potential markdown wrapping)
+  let jsonStr = responseText.trim();
+  if (jsonStr.startsWith('\`\`\`')) {
+    jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsed = JSON.parse(jsonMatch[0]);
+    } else {
+      throw new Error('Gemini no devolvió JSON válido. Intentá con otro archivo.');
+    }
+  }
+
+  return parsed;
 }
 

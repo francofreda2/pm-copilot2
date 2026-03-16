@@ -11,78 +11,82 @@ interface Props {
 
 export default function ProjectList({ projects, onSelect, onNew, onDelete }: Props) {
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-8">
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 24px' }} className="animate-fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Mis Proyectos</h1>
-          <p className="text-zinc-500 text-sm mt-1">Gestiona y continúa trabajando en tus proyectos.</p>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--neutral-900)', letterSpacing: '-0.5px' }}>
+            Mis Proyectos
+          </h1>
+          <p style={{ color: 'var(--neutral-500)', fontSize: 14, marginTop: 4 }}>
+            Gestiona y continúa trabajando en tus proyectos.
+          </p>
         </div>
-        <button
-          onClick={onNew}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-          <Plus className="w-5 h-5" />
+        <button onClick={onNew} className="btn btn-primary">
+          <Plus size={18} />
           Nuevo Proyecto
         </button>
       </div>
 
       {projects.length === 0 ? (
-        <div className="bg-white border border-zinc-200 border-dashed rounded-2xl p-12 text-center">
-          <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Folder className="w-8 h-8 text-zinc-400" />
+        <div className="card" style={{ padding: 64, textAlign: 'center', borderStyle: 'dashed' }}>
+          <div style={{ width: 64, height: 64, background: 'var(--neutral-100)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <Folder size={28} style={{ color: 'var(--neutral-400)' }} />
           </div>
-          <h3 className="text-lg font-medium text-zinc-900 mb-2">No hay proyectos aún</h3>
-          <p className="text-zinc-500 mb-6 max-w-sm mx-auto">
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--neutral-900)', marginBottom: 8 }}>
+            No hay proyectos aún
+          </h3>
+          <p style={{ color: 'var(--neutral-500)', fontSize: 14, maxWidth: 380, margin: '0 auto 24px' }}>
             Comienza creando tu primer proyecto para que PM Copilot te ayude a planificarlo.
           </p>
-          <button
-            onClick={onNew}
-            className="text-indigo-600 font-medium hover:text-indigo-700"
-          >
-            Crear mi primer proyecto &rarr;
+          <button onClick={onNew} style={{ background: 'none', border: 'none', color: 'var(--primary-600)', fontWeight: 600, cursor: 'pointer', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
+            Crear mi primer proyecto →
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }} className="stagger-children">
           {projects.map(project => (
-            <div 
+            <div
               key={project.id}
-              className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col cursor-pointer group relative"
+              className="card card-interactive group"
+              style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative' }}
               onClick={() => onSelect(project)}
             >
-              <div className="flex justify-between items-start mb-3">
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                  project.status === 'Completado' ? 'bg-emerald-100 text-emerald-700' :
-                  project.status === 'En Ejecución' ? 'bg-indigo-100 text-indigo-700' :
-                  'bg-amber-100 text-amber-700'
-                }`}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                <span className={`badge ${
+                  project.status === 'Completado' ? 'badge-success' :
+                  project.status === 'En Ejecución' ? 'badge-info' :
+                  'badge-warning'
+                }`} style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
                   {project.status}
                 </span>
-                <button 
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     if (window.confirm('¿Estás seguro de eliminar este proyecto?')) {
                       onDelete(project.id);
                     }
                   }}
-                  className="text-zinc-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="btn-danger group-hover-visible"
+                  style={{ opacity: 0, transition: 'opacity 0.15s' }}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 size={15} />
                 </button>
               </div>
-              
-              <h3 className="text-lg font-bold text-zinc-900 mb-1 line-clamp-1">{project.name}</h3>
-              <p className="text-sm text-zinc-500 line-clamp-2 mb-4 flex-1">
+
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--neutral-900)', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {project.name}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--neutral-500)', lineHeight: 1.5, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                 {project.businessObjective}
               </p>
-              
-              <div className="flex items-center justify-between pt-4 border-t border-zinc-100 mt-auto">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
-                  <Clock className="w-3.5 h-3.5" />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, borderTop: '1px solid var(--border-subtle)', marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--neutral-400)', fontWeight: 500, fontFamily: "'JetBrains Mono', monospace" }}>
+                  <Clock size={13} />
                   {new Date(project.lastUpdated).toLocaleDateString()}
                 </div>
-                <div className="text-indigo-600 flex items-center text-sm font-medium group-hover:translate-x-1 transition-transform">
-                  Abrir <ChevronRight className="w-4 h-4 ml-0.5" />
+                <div style={{ color: 'var(--primary-600)', display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600, transition: 'transform 0.2s' }}>
+                  Abrir <ChevronRight size={16} style={{ marginLeft: 2 }} />
                 </div>
               </div>
             </div>

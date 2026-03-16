@@ -24,6 +24,22 @@ export interface Activity { n: string; r: string; d: string; s: 'pend'|'prog'|'o
 export interface Task { id: string; name: string; om: number; p: number; te: string; pred: string; rec: string; rc: boolean; start: number; dur: number; status?: 'pending' | 'in_progress' | 'completed'; }
 export interface Risk { v: 'high'|'mid'|'low'; id: string; title: string; badge: string; desc: string; }
 
+export interface WBSNode {
+  id: string;
+  name: string;
+  owner?: string;
+  duration?: string;
+  level: number; // 0=project, 1=phase, 2=deliverable, 3=work package, 4=task
+  children: WBSNode[];
+  collapsed?: boolean;
+}
+
+export interface ChangeLogEntry {
+  timestamp: string;
+  action: string;
+  detail: string;
+}
+
 export interface ProjectData {
   id: string;
   name: string;
@@ -32,6 +48,7 @@ export interface ProjectData {
   projectType: string;
   status: 'Planificación' | 'En Ejecución' | 'Completado';
   lastUpdated: string;
+  projectStartDate: string; // ISO date string, e.g. "2026-03-16"
   chatMessages: ChatMessage[];
   
   // KPIs
@@ -46,6 +63,8 @@ export interface ProjectData {
   activities: Activity[];
   tasks: Task[];
   risks: Risk[];
+  wbsNodes: WBSNode[];
+  changeLog: ChangeLogEntry[];
   
   // SVGs
   flowSvg: string;
