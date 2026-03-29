@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, Loader2, User, Bot } from 'lucide-react';
+import { Send, Loader2, User, Bot, Mic, MicOff } from 'lucide-react';
 import { ChatMessage, ProjectData } from '../types';
 import { PMChatService } from '../services/geminiService';
+import { ChatSkeleton } from './SkeletonLoader';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 interface Props {
   initialContext: ProjectData;
@@ -15,29 +17,36 @@ export default function ChatInterface({ initialContext, messages, setMessages }:
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatServiceRef = useRef<PMChatService | null>(null);
+
+  const { isListening, isSupported: voiceSupported, startListening, stopListening, interimTranscript } = useVoiceInput({
+    onTranscript: (text) => setInput(prev => (prev ? prev + ' ' : '') + text),
+    onError: (msg) => { setVoiceError(msg); setTimeout(() => setVoiceError(null), 4000); },
+  });
 
   useEffect(() => {
     chatServiceRef.current = null;
 
     if (messages.length > 0) {
-      chatServiceRef.current = new PMChatService(messages);
+      chatServiceRef.current = new PMChatService(messages, initialContext.methodology);
       return;
     }
 
     const initChat = async () => {
       try {
-        chatServiceRef.current = new PMChatService();
+        chatServiceRef.current = new PMChatService(undefined, initialContext.methodology);
         setIsLoading(true);
 
         const initialPrompt = `Aquí están los datos iniciales de mi proyecto:
 - Nombre: ${initialContext.name}
 - Objetivo Principal: ${initialContext.businessObjective}
 - Tipo de Proyecto: ${initialContext.projectType}
+- Metodología: ${initialContext.methodology || 'predictive'}
 - Descripción: ${initialContext.description}
 
-Por favor, preséntate y comienza directamente con el Paso 1 de la FASE 1 (Acta de Constitución).`;
+Contexto: Trabajo en una empresa con estructura corporativa definida. Necesito que generes TODOS los artefactos del proyecto (Charter, OEPs, EDT, Cronograma PERT, Hitos, Riesgos, RACI, Plan de Comunicaciones, Actividades y KPIs). Si necesitás más información crítica para generar datos de calidad, preguntame todo junto en un solo bloque.`;
 
         const userMsg: ChatMessage = {
           id: 'init-user',
@@ -168,15 +177,7 @@ Por favor, preséntate y comienza directamente con el Paso 1 de la FASE 1 (Acta 
         ))}
 
         {isLoading && messages.length > 0 && (
-          <div className="animate-fade-in" style={{ display: 'flex', gap: 12 }}>
-            <div className="chat-avatar chat-avatar-bot">
-              <Bot size={18} />
-            </div>
-            <div className="chat-bubble-model" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Loader2 size={18} className="animate-spin" style={{ color: 'var(--primary-500)' }} />
-              <span style={{ color: 'var(--neutral-500)', fontSize: 13 }}>PM Copilot está escribiendo...</span>
-            </div>
-          </div>
+          <ChatSkeleton />
         )}
 
         {error && (
@@ -191,7 +192,7 @@ Por favor, preséntate y comienza directamente con el Paso 1 de la FASE 1 (Acta 
       <div className="chat-input-area">
         <form onSubmit={handleSend} style={{ position: 'relative', maxWidth: 800, margin: '0 auto' }}>
           <textarea
-            value={input}
+            value={isListening && interimTranscript ? input + interimTranscript : input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -199,11 +200,39 @@ Por favor, preséntate y comienza directamente con el Paso 1 de la FASE 1 (Acta 
                 handleSend(e);
               }
             }}
-            placeholder="Escribe tu mensaje aquí... (Enter para enviar)"
+            placeholder={isListening ? '🎤 Escuchando...' : 'Escribe o usa el micrófono... (Enter para enviar)'}
             className="chat-input"
+            style={{ paddingRight: voiceSupported ? 80 : 48 }}
             rows={1}
             disabled={isLoading}
           />
+          {voiceSupported && (
+            <button
+              type="button"
+              onClick={isListening ? stopListening : startListening}
+              disabled={isLoading}
+              title={isListening ? 'Detener grabación' : 'Hablar'}
+              style={{
+                position: 'absolute',
+                right: 44,
+                bottom: 10,
+                background: isListening ? 'var(--error, #ef4444)' : 'var(--neutral-200)',
+                border: 'none',
+                borderRadius: '50%',
+                width: 28,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: isListening ? '#fff' : 'var(--neutral-600)',
+                transition: 'all 0.2s',
+                animation: isListening ? 'pulse 1.2s infinite' : 'none',
+              }}
+            >
+              {isListening ? <MicOff size={13} /> : <Mic size={13} />}
+            </button>
+          )}
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
@@ -212,8 +241,15 @@ Por favor, preséntate y comienza directamente con el Paso 1 de la FASE 1 (Acta 
             <Send size={16} />
           </button>
         </form>
-        <div style={{ textAlign: 'center', marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--neutral-400)' }}>Shift + Enter para salto de línea</span>
+        {voiceError && (
+          <div style={{ textAlign: 'center', marginTop: 6, fontSize: 11, color: 'var(--error, #ef4444)' }}>
+            {voiceError}
+          </div>
+        )}
+        <div style={{ textAlign: 'center', marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: 'var(--neutral-400)' }}>
+            Shift + Enter para salto de línea{voiceSupported ? ' · Micrófono disponible' : ''}
+          </span>
         </div>
       </div>
     </div>

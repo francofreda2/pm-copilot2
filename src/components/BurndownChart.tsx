@@ -94,40 +94,38 @@ export default function BurndownChart({ data }: Props) {
   }
 
   return (
-    <div className="card animate-fade-in" style={{ padding: 24, marginBottom: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+    <div className="card animate-fade-in" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
+      <div style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-light)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <TrendingDown size={20} style={{ color: 'var(--primary-600)' }} />
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <TrendingDown size={18} style={{ color: 'var(--primary-600)' }} />
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--neutral-800)' }}>Burndown Chart</h3>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--neutral-500)' }}>Avance real vs planificado</p>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--neutral-800)' }}>Burndown Chart</h3>
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--neutral-500)' }}>Avance real vs planificado</p>
           </div>
         </div>
         
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--neutral-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Horas Totales</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--neutral-800)', fontFamily: "'JetBrains Mono', monospace" }}>{totalHours}h</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--neutral-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Completadas</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#10b981', fontFamily: "'JetBrains Mono', monospace" }}>{completedHours}h</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--neutral-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Restantes</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6', fontFamily: "'JetBrains Mono', monospace" }}>{remainingHours}h</div>
-          </div>
+        <div style={{ display: 'flex', gap: 20 }}>
+          {[
+            { label: 'Total', value: `${totalHours}h`, color: 'var(--neutral-800)' },
+            { label: 'Completadas', value: `${completedHours}h`, color: 'var(--success)' },
+            { label: 'Restantes', value: `${remainingHours}h`, color: 'var(--primary-600)' },
+          ].map((s, i) => (
+            <div key={i} style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 10, color: 'var(--neutral-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: s.color, fontFamily: "'JetBrains Mono', monospace" }}>{s.value}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {tasks.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', background: 'var(--neutral-50)', borderRadius: 'var(--radius-lg)' }}>
-          <p style={{ color: 'var(--neutral-400)' }}>Agregá tareas al proyecto para visualizar el Burndown Chart.</p>
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <p style={{ color: 'var(--neutral-400)', fontSize: 13 }}>Agregá tareas al proyecto para visualizar el Burndown Chart.</p>
         </div>
       ) : (
-        <div style={{ width: '100%', overflowX: 'auto' }}>
+        <div style={{ width: '100%', overflowX: 'auto', padding: '20px 24px 24px' }}>
           <svg width={W} height={H} style={{ overflow: 'visible', margin: '0 auto', display: 'block' }}>
             {/* Grid & Axes */}
             <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#cbd5e1" strokeWidth="2" />

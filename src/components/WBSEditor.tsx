@@ -9,11 +9,11 @@ interface Props {
 }
 
 const LEVEL_COLORS = [
-  { bg: '#fff', text: 'var(--neutral-900)', border: 'var(--brand-navy)', label: 'Proyecto' },
-  { bg: '#fff', text: 'var(--neutral-900)', border: 'var(--primary-600)', label: 'Fase' },
-  { bg: '#fff', text: 'var(--neutral-800)', border: 'var(--success)', label: 'Entregable' },
-  { bg: '#fff', text: 'var(--neutral-700)', border: 'var(--warning)', label: 'Paquete' },
-  { bg: 'var(--neutral-50)', text: 'var(--neutral-600)', border: 'var(--neutral-400)', label: 'Tarea' },
+  { bg: 'var(--bg-card)', text: 'var(--neutral-900)', border: 'var(--primary-700)', label: 'Proyecto' },
+  { bg: 'var(--bg-card)', text: 'var(--neutral-900)', border: 'var(--primary-500)', label: 'Fase' },
+  { bg: 'var(--bg-card)', text: 'var(--neutral-800)', border: 'var(--success)', label: 'Entregable' },
+  { bg: 'var(--bg-card)', text: 'var(--neutral-700)', border: 'var(--warning)', label: 'Paquete' },
+  { bg: 'var(--bg-card)', text: 'var(--neutral-600)', border: 'var(--neutral-400)', label: 'Tarea' },
 ];
 const LEVEL_ICONS = [Layers, FolderOpen, Box, FileText, FileText];
 
@@ -168,7 +168,7 @@ function WBSNodeComponent({
             position: 'relative',
             minHeight: 44,
           }}
-          onDoubleClick={() => !isRoot && setIsEditing(true)}
+          onDoubleClick={() => setIsEditing(true)}
         >
           <LevelIcon size={16} style={{ opacity: 0.7, flexShrink: 0 }} />
 
@@ -180,21 +180,21 @@ function WBSNodeComponent({
                 onChange={e => setEditName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }}
                 className="form-input form-input-sm"
-                style={{ flex: '1 1 140px', minWidth: 100, background: 'rgba(255,255,255,0.95)', color: 'var(--neutral-900)' }}
+                style={{ flex: '1 1 140px', minWidth: 100, background: 'var(--bg-input)', color: 'var(--neutral-900)' }}
                 placeholder="Nombre"
               />
               <input
                 value={editOwner}
                 onChange={e => setEditOwner(e.target.value)}
                 className="form-input form-input-sm"
-                style={{ flex: '0 1 100px', minWidth: 80, background: 'rgba(255,255,255,0.95)', color: 'var(--neutral-900)' }}
+                style={{ flex: '0 1 100px', minWidth: 80, background: 'var(--bg-input)', color: 'var(--neutral-900)' }}
                 placeholder="Responsable"
               />
               <input
                 value={editDuration}
                 onChange={e => setEditDuration(e.target.value)}
                 className="form-input form-input-sm"
-                style={{ flex: '0 1 70px', minWidth: 60, background: 'rgba(255,255,255,0.95)', color: 'var(--neutral-900)' }}
+                style={{ flex: '0 1 70px', minWidth: 60, background: 'var(--bg-input)', color: 'var(--neutral-900)' }}
                 placeholder="Duración"
               />
               <button onClick={handleSave} className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff', border: 'none', padding: '4px 8px' }}>
@@ -255,7 +255,6 @@ function WBSNodeComponent({
                     <Plus size={13} />
                   </button>
                 )}
-                {!isRoot && (
                   <>
                     <button
                       onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
@@ -290,7 +289,6 @@ function WBSNodeComponent({
                       <Trash2 size={12} />
                     </button>
                   </>
-                )}
               </div>
             </>
           )}
@@ -387,7 +385,7 @@ export default function WBSEditor({ nodes, projectName, onChange }: Props) {
         display: 'flex',
         gap: 16,
         flexWrap: 'wrap',
-        background: 'var(--neutral-50)',
+        background: 'var(--bg-app)',
       }}>
         {LEVEL_COLORS.map((lc, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--neutral-500)' }}>
@@ -395,7 +393,7 @@ export default function WBSEditor({ nodes, projectName, onChange }: Props) {
               width: 10,
               height: 10,
               borderRadius: 3,
-              background: i <= 1 ? lc.border : '#fff',
+              background: i <= 1 ? lc.border : 'var(--bg-card)',
               border: `1.5px solid ${lc.border}`,
             }} />
             N{i}: {lc.label}

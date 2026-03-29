@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find 'c:/Users/ffreda/OneDrive - Prisma Medios de Pago/Documentos/Incidentes/pm-copilot2/src' -name *gemini* -o -name *service* -o -name *voice* -o -name *audio*)"
+    ]
+  }
+}

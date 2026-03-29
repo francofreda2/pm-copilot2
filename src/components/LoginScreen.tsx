@@ -44,8 +44,40 @@ export default function LoginScreen({ onLogin }: Props) {
         </div>
         <h1 className="login-title">PM Copilot</h1>
         <p className="login-subtitle">
-          {isRegister ? 'Crea tu cuenta para empezar' : 'Inicia sesión en tu cuenta'}
+          {isRegister ? 'Crea tu cuenta para empezar' : 'Gestión de proyectos con IA'}
         </p>
+
+        {/* Toggle tabs */}
+        <div style={{ display: 'flex', background: 'var(--neutral-100)', borderRadius: 'var(--radius-md)', padding: 3, marginBottom: 28 }}>
+          <button
+            type="button"
+            onClick={() => { setIsRegister(false); setError(''); }}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, fontFamily: 'Inter, sans-serif',
+              background: !isRegister ? 'var(--bg-card)' : 'transparent',
+              color: !isRegister ? 'var(--primary-600)' : 'var(--neutral-500)',
+              boxShadow: !isRegister ? 'var(--shadow-sm)' : 'none',
+              transition: 'all 0.2s',
+            }}
+          >
+            Iniciar Sesión
+          </button>
+          <button
+            type="button"
+            onClick={() => { setIsRegister(true); setError(''); }}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, fontFamily: 'Inter, sans-serif',
+              background: isRegister ? 'var(--bg-card)' : 'transparent',
+              color: isRegister ? 'var(--primary-600)' : 'var(--neutral-500)',
+              boxShadow: isRegister ? 'var(--shadow-sm)' : 'none',
+              transition: 'all 0.2s',
+            }}
+          >
+            Registrarse
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit}>
           {error && (
@@ -97,24 +129,9 @@ export default function LoginScreen({ onLogin }: Props) {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: 'var(--neutral-500)' }}>
-          {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
-          <button
-            onClick={() => { setIsRegister(!isRegister); setError(''); }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--primary-600)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              marginLeft: 6,
-              fontFamily: 'Inter, sans-serif',
-              fontSize: 13,
-            }}
-          >
-            {isRegister ? 'Inicia Sesión' : 'Regístrate'}
-          </button>
-        </div>
+        <p style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: 'var(--neutral-400)', lineHeight: 1.6 }}>
+          Powered by Google Gemini AI
+        </p>
       </div>
     </div>
   );

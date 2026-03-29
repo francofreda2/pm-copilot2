@@ -4,23 +4,42 @@ import InitialForm from './components/InitialForm';
 import ProjectDashboard from './components/ProjectDashboard';
 import ProjectList from './components/ProjectList';
 import LoginScreen from './components/LoginScreen';
-import { LayoutDashboard, Menu, X, MessageSquare, BarChart2, ChevronLeft, LogOut } from 'lucide-react';
-import { ProjectData, ChatMessage } from './types';
+import PortfolioView from './components/PortfolioView';
+import IncidentList from './components/IncidentList';
+import IncidentDashboard from './components/IncidentDashboard';
+import { LayoutDashboard, Menu, X, MessageSquare, BarChart2, ChevronLeft, LogOut, Moon, Sun, Layers, AlertTriangle, Folder } from 'lucide-react';
+import { ProjectData, IncidentData, ChatMessage } from './types';
 import { extractDashboardData } from './services/geminiService';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || 'null'));
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
+  });
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [incidents, setIncidents] = useState<IncidentData[]>([]);
   const [currentProject, setCurrentProject] = useState<ProjectData | null>(null);
-  const [view, setView] = useState<'list' | 'new' | 'chat' | 'dashboard'>('list');
+  const [currentIncident, setCurrentIncident] = useState<IncidentData | null>(null);
+  const [view, setView] = useState<'list' | 'new' | 'chat' | 'dashboard' | 'portfolio' | 'incidents' | 'incident-detail'>('list');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [activeModule, setActiveModule] = useState<'projects' | 'incidents'>('projects');
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     if (token) {
       fetchProjects();
+      fetchIncidents();
     }
   }, [token]);
 
@@ -79,7 +98,9 @@ export default function App() {
     setToken(null);
     setUser(null);
     setProjects([]);
+    setIncidents([]);
     setCurrentProject(null);
+    setCurrentIncident(null);
     setView('list');
   };
 
@@ -89,10 +110,54 @@ export default function App() {
     saveProjectToBackend(updatedData);
   };
 
+  // ── Incidents ──
+  const fetchIncidents = async () => {
+    try {
+      const res = await fetch('/api/incidents', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setIncidents(await res.json());
+    } catch (error) { console.error('Error fetching incidents:', error); }
+  };
+
+  const saveIncidentToBackend = async (incident: IncidentData) => {
+    try {
+      await fetch('/api/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(incident)
+      });
+    } catch (error) { console.error('Error saving incident:', error); }
+  };
+
+  const deleteIncidentFromBackend = async (id: string) => {
+    try {
+      await fetch(`/api/incidents/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    } catch (error) { console.error('Error deleting incident:', error); }
+  };
+
+  const handleNewIncident = (incident: IncidentData) => {
+    setIncidents(prev => [incident, ...prev]);
+    setCurrentIncident(incident);
+    setView('incident-detail');
+    saveIncidentToBackend(incident);
+  };
+
+  const updateCurrentIncident = (updatedData: IncidentData) => {
+    setCurrentIncident(updatedData);
+    setIncidents(prev => prev.map(i => i.id === updatedData.id ? updatedData : i));
+    saveIncidentToBackend(updatedData);
+  };
+
+  const handleDeleteIncident = (id: string) => {
+    setIncidents(prev => prev.filter(i => i.id !== id));
+    deleteIncidentFromBackend(id);
+    if (currentIncident?.id === id) { setCurrentIncident(null); setView('incidents'); }
+  };
+
   const handleInitialSubmit = (input: any) => {
     const newProject: ProjectData = {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       ...input,
+      methodology: input.methodology || 'predictive',
       status: 'Planificación',
       lastUpdated: new Date().toISOString(),
       chatMessages: [],
@@ -107,6 +172,14 @@ export default function App() {
       risks: [],
       wbsNodes: [],
       changeLog: [],
+      resources: [],
+      raciMatrix: [],
+      issues: [],
+      changeRequests: [],
+      lessonsLearned: [],
+      communicationPlan: [],
+      stakeholders: [],
+      budgetLines: [],
       projectStartDate: new Date().toISOString().split('T')[0],
       flowSvg: '',
       wbsSvg: ''
@@ -122,6 +195,7 @@ export default function App() {
   const handleSelectProject = (project: ProjectData) => {
     const migratedProject = {
       ...project,
+      methodology: project.methodology || 'predictive',
       milestones: project.milestones || [],
       oeps: project.oeps || [],
       activities: project.activities || [],
@@ -129,6 +203,14 @@ export default function App() {
       risks: project.risks || [],
       wbsNodes: project.wbsNodes || [],
       changeLog: project.changeLog || [],
+      resources: project.resources || [],
+      raciMatrix: project.raciMatrix || [],
+      issues: project.issues || [],
+      changeRequests: project.changeRequests || [],
+      lessonsLearned: project.lessonsLearned || [],
+      communicationPlan: project.communicationPlan || [],
+      stakeholders: project.stakeholders || [],
+      budgetLines: project.budgetLines || [],
       projectStartDate: project.projectStartDate || new Date().toISOString().split('T')[0],
       flowSvg: project.flowSvg || '',
       wbsSvg: project.wbsSvg || ''
@@ -164,6 +246,7 @@ export default function App() {
       businessObjective: parsedData.businessObjective || '',
       projectType: parsedData.projectType || 'Otro',
       description: 'Generado automáticamente desde archivo importado',
+      methodology: parsedData.methodology || 'predictive',
       status: parsedData.status || 'Planificación',
       lastUpdated: new Date().toISOString(),
       projectStartDate: new Date().toISOString().split('T')[0],
@@ -186,6 +269,14 @@ export default function App() {
       })),
       wbsNodes: (parsedData.wbsNodes || []).map((n:any) => mapWBSNode(n)),
       changeLog: [{ timestamp: new Date().toISOString(), action: 'Creación', detail: 'Proyecto generado desde importación de archivo' }],
+      resources: (parsedData.resources || []).map((r: any, i: number) => ({ id: r.id || `RES${i+1}`, name: r.name || 'Recurso', role: r.role || '', availability: r.availability ?? 100, costPerHour: r.costPerHour ?? 0 })),
+      raciMatrix: parsedData.raciMatrix || [],
+      issues: parsedData.issues || [],
+      changeRequests: parsedData.changeRequests || [],
+      lessonsLearned: parsedData.lessonsLearned || [],
+      communicationPlan: parsedData.communicationPlan || [],
+      stakeholders: parsedData.stakeholders || [],
+      budgetLines: parsedData.budgetLines || [],
       flowSvg: parsedData.flowSvg || '',
       wbsSvg: parsedData.wbsSvg || ''
     };
@@ -233,15 +324,16 @@ export default function App() {
               </button>
             )}
 
-            {view !== 'list' && (
+            {view !== 'list' && view !== 'incidents' && (
               <button
                 onClick={() => {
                   setCurrentProject(null);
-                  setView('list');
+                  setCurrentIncident(null);
+                  setView(activeModule === 'incidents' ? 'incidents' : 'list');
                   setIsSidebarOpen(false);
                 }}
                 className="btn-icon"
-                title="Volver a mis proyectos"
+                title="Volver"
               >
                 <ChevronLeft size={20} />
               </button>
@@ -254,6 +346,44 @@ export default function App() {
           </div>
 
           <div className="navbar-actions">
+            {/* Module switcher */}
+            {(view === 'list' || view === 'incidents') && (
+              <div className="view-toggle">
+                <button
+                  onClick={() => { setActiveModule('projects'); setView('list'); setCurrentIncident(null); }}
+                  className={`view-toggle-btn ${activeModule === 'projects' ? 'active' : ''}`}
+                >
+                  <Folder size={15} />
+                  <span>Proyectos</span>
+                </button>
+                <button
+                  onClick={() => { setActiveModule('incidents'); setView('incidents'); setCurrentProject(null); }}
+                  className={`view-toggle-btn ${activeModule === 'incidents' ? 'active' : ''}`}
+                >
+                  <AlertTriangle size={15} />
+                  <span>Incidencias</span>
+                  {incidents.filter(i => i.status !== 'Cerrado' && i.status !== 'Resuelto').length > 0 && (
+                    <span style={{ background: 'var(--error)', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, marginLeft: 4 }}>
+                      {incidents.filter(i => i.status !== 'Cerrado' && i.status !== 'Resuelto').length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+            {view === 'list' && projects.length > 1 && activeModule === 'projects' && (
+              <button
+                onClick={() => setView('portfolio')}
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+              >
+                <Layers size={15} /> Portfolio
+              </button>
+            )}
+            {view === 'portfolio' && (
+              <button onClick={() => setView('list')} className="btn btn-secondary" style={{ fontSize: 13 }}>
+                ← Mis Proyectos
+              </button>
+            )}
             {currentProject && (view === 'chat' || view === 'dashboard') && (
               <div className="view-toggle">
                 <button
@@ -273,6 +403,14 @@ export default function App() {
               </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderLeft: '1px solid var(--border-light)', paddingLeft: 16, marginLeft: 8 }}>
+              <button
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                className="btn-icon"
+                title="Alternar tema"
+                style={{ color: 'var(--neutral-500)' }}
+              >
+                {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+              </button>
               <span style={{ fontSize: 13, color: 'var(--neutral-500)', fontWeight: 500 }}>{user?.email}</span>
               <button onClick={handleLogout} className="btn-icon" title="Cerrar sesión" style={{ color: 'var(--neutral-400)' }}>
                 <LogOut size={17} />
@@ -309,6 +447,34 @@ export default function App() {
 
         {/* Main Area */}
         <main style={{ flex: 1, minWidth: 0 }}>
+          {view === 'portfolio' && (
+            <PortfolioView
+              projects={projects}
+              onSelectProject={(id) => {
+                const p = projects.find(x => x.id === id);
+                if (p) { handleSelectProject(p); }
+              }}
+              onBack={() => setView('list')}
+            />
+          )}
+
+          {view === 'incidents' && (
+              <IncidentList
+                incidents={incidents}
+                onSelect={(inc) => { setCurrentIncident(inc); setView('incident-detail'); }}
+                onNew={handleNewIncident}
+                onDelete={handleDeleteIncident}
+              />
+            )}
+
+            {view === 'incident-detail' && currentIncident && (
+              <IncidentDashboard
+                incident={currentIncident}
+                onUpdate={updateCurrentIncident}
+                onBack={() => { setCurrentIncident(null); setView('incidents'); }}
+              />
+            )}
+
           {view === 'list' && (
             <ProjectList
               projects={projects}

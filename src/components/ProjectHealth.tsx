@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { ProjectData, Task } from '../types';
-import { AlertTriangle, CheckCircle, Clock, TrendingDown, TrendingUp, Shield, Zap, Bell, ArrowRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, TrendingDown, TrendingUp, Shield, Zap, Bell, BellOff, ArrowRight } from 'lucide-react';
 
 interface Props {
   data: ProjectData;
@@ -112,6 +112,45 @@ function generateAlerts(data: ProjectData, cpmNodes: any[]): Alert[] {
     });
   }
 
+  // High risks without mitigation owner
+  const unownedHighRisks = data.risks.filter(r => r.v === 'high' && r.status !== 'closed' && !r.owner);
+  if (unownedHighRisks.length > 0) {
+    alerts.push({
+      level: 'warning',
+      title: `${unownedHighRisks.length} riesgo(s) alto(s) sin dueño asignado`,
+      message: `Los riesgos ${unownedHighRisks.map(r => r.id).join(', ')} no tienen un responsable de mitigación.`
+    });
+  }
+
+  // Open critical issues
+  const criticalIssues = (data.issues || []).filter(i => i.priority === 'critical' && (i.status === 'open' || i.status === 'in_progress'));
+  if (criticalIssues.length > 0) {
+    alerts.push({
+      level: 'critical',
+      title: `${criticalIssues.length} issue(s) crítico(s) abierto(s)`,
+      message: `Issues: ${criticalIssues.map(i => i.title).join(', ')}. Requieren resolución inmediata.`
+    });
+  }
+
+  // Pending change requests
+  const pendingCRs = (data.changeRequests || []).filter(c => c.status === 'pending');
+  if (pendingCRs.length > 0) {
+    alerts.push({
+      level: 'info',
+      title: `${pendingCRs.length} solicitud(es) de cambio pendiente(s)`,
+      message: `Hay solicitudes de cambio esperando aprobación: ${pendingCRs.map(c => c.title).join(', ')}.`
+    });
+  }
+
+  // No resources registered
+  if ((data.resources || []).length === 0 && totalTasks > 2) {
+    alerts.push({
+      level: 'info',
+      title: 'Sin recursos registrados',
+      message: 'Definí los recursos del proyecto para habilitar la matriz RACI y la asignación de carga.'
+    });
+  }
+
   // Progress check
   if (completedCount === totalTasks) {
     alerts.push({ level: 'success', title: '¡Todas las tareas completadas!', message: 'El proyecto ha finalizado todas sus tareas con éxito.' });
@@ -163,40 +202,84 @@ function generateStatusSuggestions(data: ProjectData, cpmNodes: any[]): StatusSu
 /* ── Component ── */
 export default function ProjectHealth({ data, onUpdate }: Props) {
   const { nodes: cpmNodes, projectDuration } = useMemo(() => quickCPM(data.tasks), [data.tasks]);
+
+  // Feature 4: Browser notifications
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
+  const sentNotifIds = useRef<Set<string>>(new Set());
+
+  const requestNotifications = async () => {
+    if (typeof Notification === 'undefined') return;
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+    if (perm === 'granted') localStorage.setItem('pm_notifications_enabled', '1');
+  };
   
-  // EVM Calculations
+  // EVM Calculations — corrected PV based on working hours elapsed
   const evm = useMemo(() => {
-    const today = new Date().getTime();
-    const start = new Date(data.projectStartDate || new Date()).getTime();
-    const msPerHour = 1000 * 60 * 60;
-    
-    let pv = 0; // Planned Value (hours that should be done)
-    let ev = 0; // Earned Value (hours actually done)
-    
+    const now = new Date();
+    const startDate = new Date(data.projectStartDate || new Date());
+    startDate.setHours(8, 0, 0, 0);
+
+    // Calculate working hours elapsed since project start
+    let workingHoursElapsed = 0;
+    const cursor = new Date(startDate);
+    while (cursor < now) {
+      const day = cursor.getDay();
+      if (day !== 0 && day !== 6) workingHoursElapsed += 8;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const totalBudget = cpmNodes.reduce((s, t) => s + (t.dur || 0), 0);
+    let pv = 0; // Planned Value at current date
+    let ev = 0; // Earned Value
+    let ac = 0; // Actual Cost (hours)
+
     cpmNodes.forEach(t => {
-      // Calculate how much of the task should be done by today linearly
-      const taskStartMs = start + (t.ES || 0) * msPerHour; // Rough approx
-      const taskEndMs = start + (t.EF || t.dur) * msPerHour;
-      
+      const dur = t.dur || 0;
+      const es = t.ES || 0;
+      const ef = t.EF || (es + dur);
+
+      // PV: how much of this task SHOULD be done by now based on schedule
       let plannedPct = 0;
-      if (today >= taskEndMs) plannedPct = 1;
-      else if (today > taskStartMs) plannedPct = (today - taskStartMs) / (taskEndMs - taskStartMs);
-      
-      pv += (t.dur || 0) * plannedPct;
-      
-      if (t.status === 'completed') ev += t.dur || 0;
-      else if (t.status === 'in_progress') ev += (t.dur || 0) * 0.5; // Simple 50% rule
+      if (workingHoursElapsed >= ef) plannedPct = 1;
+      else if (workingHoursElapsed > es && dur > 0) plannedPct = (workingHoursElapsed - es) / dur;
+      pv += dur * plannedPct;
+
+      // EV: actual % complete * budget
+      const pct = (t.percentComplete ?? (t.status === 'completed' ? 100 : t.status === 'in_progress' ? 50 : 0)) / 100;
+      ev += dur * pct;
+
+      // AC: actual hours logged, fallback to EV-based estimate
+      ac += t.actualHours || (dur * pct);
     });
-    
-    const spi = pv === 0 ? 1 : ev / pv;
-    // Mock CPI based on SPI and critical tasks
-    const cpi = spi * (1 - (cpmNodes.filter(t => t.isCritical && t.totalSlack < 0).length * 0.05));
-    
-    return { pv, ev, spi, cpi };
+
+    const spi = pv > 0 ? ev / pv : (ev > 0 ? 1.0 : 0);
+    const cpi = ac > 0 ? ev / ac : (ev > 0 ? 1.0 : 0);
+    const bac = totalBudget;
+    const eac = cpi > 0 ? bac / cpi : bac;
+    const etc = Math.max(0, eac - ac);
+    const vac = bac - eac;
+
+    return { pv, ev, ac, spi, cpi, bac, eac, etc, vac };
   }, [cpmNodes, data.projectStartDate]);
 
   const alerts = useMemo(() => generateAlerts(data, cpmNodes), [data, cpmNodes]);
   const statusSuggestions = useMemo(() => generateStatusSuggestions(data, cpmNodes), [data, cpmNodes]);
+
+  // Feature 4: send browser notifications for new critical alerts
+  useEffect(() => {
+    if (notifPermission !== 'granted') return;
+    if (localStorage.getItem('pm_notifications_enabled') !== '1') return;
+    alerts.filter(a => a.level === 'critical').forEach(a => {
+      const key = `${data.id}::${a.title}`;
+      if (!sentNotifIds.current.has(key)) {
+        sentNotifIds.current.add(key);
+        try { new Notification(`PM Copilot — ${data.name}`, { body: a.message, icon: '/vite.svg' }); } catch { /* ignore */ }
+      }
+    });
+  }, [alerts, notifPermission, data.id, data.name]);
 
   const totalTasks = data.tasks.length;
   const completedTasks = data.tasks.filter(t => t.status === 'completed').length;
@@ -210,14 +293,19 @@ export default function ProjectHealth({ data, onUpdate }: Props) {
     if (totalTasks === 0) return 0;
     let score = 100;
     const criticalPendingCount = cpmNodes.filter(t => t.isCritical && (!t.status || t.status === 'pending')).length;
-    score -= criticalPendingCount * 15; // Heavy penalty for unstarted critical tasks
-    score -= data.risks.filter(r => r.v === 'high').length * 10;
+    score -= criticalPendingCount * 15;
+    score -= data.risks.filter(r => r.v === 'high' && r.status !== 'closed').length * 10;
+    score -= (data.issues || []).filter(i => i.priority === 'critical' && i.status !== 'closed').length * 12;
+    score -= (data.changeRequests || []).filter(c => c.status === 'pending').length * 3;
     if (inProgressTasks === 0 && pendingTasks > 0) score -= 15;
     if (data.risks.length === 0 && totalTasks > 2) score -= 5;
+    if (evm.spi < 0.8) score -= 15;
+    else if (evm.spi < 1) score -= 5;
+    if (evm.cpi < 0.8) score -= 10;
     score = Math.max(0, Math.min(100, score));
     score = Math.round(score * (0.5 + 0.5 * (completedTasks / totalTasks)));
     return Math.max(0, Math.round(score));
-  }, [data, cpmNodes, totalTasks, completedTasks, inProgressTasks, pendingTasks]);
+  }, [data, cpmNodes, totalTasks, completedTasks, inProgressTasks, pendingTasks, evm]);
 
   const healthColor = healthScore >= 70 ? 'var(--success)' : healthScore >= 40 ? 'var(--warning)' : 'var(--error)';
   const healthLabel = healthScore >= 70 ? 'Saludable' : healthScore >= 40 ? 'Atención' : 'Crítico';
@@ -249,7 +337,10 @@ export default function ProjectHealth({ data, onUpdate }: Props) {
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ display: 'flex' }}>
           {/* Score Circle */}
-          <div style={{ width: 200, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid var(--border-light)', background: 'var(--neutral-50)' }}>
+          <div 
+            title="El Health Score (0-100) mide la salud de tu proyecto en tiempo real considerando la ruta crítica, progreso de tareas y riesgos activos de alto impacto."
+            style={{ width: 200, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid var(--border-light)', background: 'var(--neutral-50)', cursor: 'help' }}
+          >
             <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 12 }}>
               <svg width="100" height="100" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="var(--neutral-200)" strokeWidth="8" />
@@ -273,16 +364,30 @@ export default function ProjectHealth({ data, onUpdate }: Props) {
             <div className="section-title" style={{ marginBottom: 16 }}>
               Panel de Control Autónomo
               <div className="section-divider" />
+              {typeof Notification !== 'undefined' && notifPermission !== 'granted' && (
+                <button
+                  onClick={requestNotifications}
+                  title="Activar alertas del navegador para tareas críticas"
+                  style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-light)', background: 'var(--neutral-50)', cursor: 'pointer', color: 'var(--neutral-600)', fontWeight: 600 }}
+                >
+                  <Bell size={12} /> Activar notificaciones
+                </button>
+              )}
+              {notifPermission === 'granted' && (
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>
+                  <Bell size={12} /> Notificaciones activas
+                </span>
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
               {[
-                { label: 'Progreso', value: `${progressPct}%`, icon: TrendingUp, color: progressPct >= 50 ? 'var(--success)' : 'var(--warning)', sub: `SPI: ${evm.spi.toFixed(2)}` },
-                { label: 'Duración', value: formatDuration(projectDuration), icon: Clock, color: 'var(--primary-600)', sub: `CPI: ${evm.cpi.toFixed(2)}` },
-                { label: 'Ruta Crítica', value: `${criticalCount}`, icon: AlertTriangle, color: criticalCount > 0 ? 'var(--error)' : 'var(--success)', sub: 'tareas' },
-                { label: 'Riesgos', value: `${data.risks.length}`, icon: Shield, color: data.risks.filter(r => r.v === 'high').length > 0 ? 'var(--error)' : 'var(--primary-600)', sub: 'activos' },
-                { label: 'EVM (Valor)', value: `${Math.round(evm.ev)}h`, icon: Zap, color: evm.spi >= 1 ? 'var(--success)' : 'var(--warning)', sub: `PV: ${Math.round(evm.pv)}h` }
+                { label: 'Progreso', value: `${progressPct}%`, icon: TrendingUp, color: progressPct >= 50 ? 'var(--success)' : 'var(--warning)', sub: `SPI: ${evm.spi.toFixed(2)}`, tip: 'Schedule Performance Index: >1 indica adelanto, <1 indica retraso respecto al plan base.' },
+                { label: 'Duración', value: formatDuration(projectDuration), icon: Clock, color: 'var(--primary-600)', sub: `CPI: ${evm.cpi.toFixed(2)}`, tip: 'Cost Performance Index: >1 indica eficiencia, <1 indica sobrecosto.' },
+                { label: 'Ruta Crítica', value: `${criticalCount}`, icon: AlertTriangle, color: criticalCount > 0 ? 'var(--error)' : 'var(--success)', sub: 'tareas', tip: 'Cantidad de tareas que, si se demoran, retrasarán todo el proyecto.' },
+                { label: 'Riesgos', value: `${data.risks.length}`, icon: Shield, color: data.risks.filter(r => r.v === 'high').length > 0 ? 'var(--error)' : 'var(--primary-600)', sub: `${data.risks.filter(r => r.v === 'high' && r.status !== 'closed').length} altos`, tip: 'Riesgos registrados que requieren seguimiento continuo.' },
+                { label: 'EV / PV', value: `${Math.round(evm.ev)}h`, icon: Zap, color: evm.spi >= 1 ? 'var(--success)' : 'var(--warning)', sub: `PV: ${Math.round(evm.pv)}h`, tip: `Earned Value vs Planned Value a la fecha. BAC: ${Math.round(evm.bac)}h | EAC: ${Math.round(evm.eac)}h | ETC: ${Math.round(evm.etc)}h` }
               ].map((stat, i) => (
-                <div key={i} style={{ padding: '10px 14px', background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                <div key={i} title={stat.tip} style={{ padding: '10px 14px', background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', cursor: 'help' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <stat.icon size={14} style={{ color: stat.color }} />
                     <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--neutral-400)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1, textTransform: 'uppercase' }}>{stat.label}</span>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
-import { Task } from '../types';
+import { Task, ProjectData } from '../types';
 import { ZoomIn, ZoomOut, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
 
 /* ─── helpers reused from dashboard ─── */
@@ -142,9 +142,11 @@ interface Props {
   tasks: Task[];
   projectStartDate: string;
   onUpdateTasks: (tasks: Task[]) => void;
+  baseline?: ProjectData['baseline'];
+  onSaveBaseline?: () => void;
 }
 
-export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: Props) {
+export default function GanttChart({ tasks, projectStartDate, onUpdateTasks, baseline, onSaveBaseline }: Props) {
   const [zoomLevel, setZoomLevel] = useState(1); // default to Days
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ dur: '', pred: '', status: 'pending' as any });
@@ -265,6 +267,25 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
             ))}
           </div>
 
+          {/* Baseline button */}
+          {onSaveBaseline && (
+            <button
+              onClick={onSaveBaseline}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}
+              title={baseline ? `Baseline guardada: ${new Date(baseline.savedAt).toLocaleDateString()}` : 'Guardar línea base'}
+            >
+              <span style={{ fontSize: 12 }}>📌</span>
+              {baseline ? 'Actualizar Baseline' : 'Guardar Baseline'}
+            </button>
+          )}
+          {baseline && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--neutral-100)', borderRadius: 'var(--radius-sm)', fontSize: 10, color: 'var(--neutral-500)' }}>
+              <div style={{ width: 12, height: 4, background: '#94a3b8', borderRadius: 2, opacity: 0.7 }} />
+              Baseline: {new Date(baseline.savedAt).toLocaleDateString()}
+            </div>
+          )}
+
           {/* Zoom controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--neutral-100)', borderRadius: 'var(--radius-md)', padding: 3 }}>
             <button
@@ -298,7 +319,7 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
         onMouseLeave={handleMouseUp}
       >
         {/* Left: Task Table */}
-        <div style={{ width: 460, borderRight: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', background: '#fff', flexShrink: 0 }}>
+        <div style={{ width: 460, borderRight: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', flexShrink: 0 }}>
           {/* Table Header */}
           <div style={{ display: 'flex', background: 'var(--neutral-100)', borderBottom: '1px solid var(--border-light)', fontWeight: 600, fontSize: 10, color: 'var(--neutral-600)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>
             <div style={{ padding: '10px 8px', width: 45, textAlign: 'center', borderRight: '1px solid var(--border-light)' }}>ID</div>
@@ -311,10 +332,10 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
           {/* Task Rows */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {sortedTasks.map(t => (
-              <div key={t.id} style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', fontSize: 12, alignItems: 'center', background: t.isCritical ? '#fff5f5' : '#fff', height: ROW_H, cursor: 'pointer', transition: 'background 0.1s' }}
+              <div key={t.id} style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', fontSize: 12, alignItems: 'center', background: t.isCritical ? 'var(--danger-light)' : 'transparent', height: ROW_H, cursor: 'pointer', transition: 'background 0.1s' }}
                 onClick={() => { setEditingTaskId(t.id); setEditForm({ dur: String(t.dur), pred: t.pred, status: t.status || 'pending' }); }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = t.isCritical ? '#ffe2e2' : 'var(--neutral-50)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = t.isCritical ? '#fff5f5' : '#fff')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = t.isCritical ? 'rgba(239, 68, 68, 0.15)' : 'var(--neutral-50)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = t.isCritical ? 'var(--danger-light)' : 'transparent')}
               >
                 <div style={{ padding: '0 8px', width: 45, textAlign: 'center', fontWeight: 700, color: 'var(--primary-600)', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, borderRight: '1px solid var(--border-subtle)' }}>{t.id}</div>
                 <div style={{ padding: '0 8px', flex: 1, borderRight: '1px solid var(--border-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.name}>{t.name}</div>
@@ -328,7 +349,7 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
         </div>
 
         {/* Right: Gantt Bars */}
-        <div ref={ganttAreaRef} style={{ flex: 1, overflow: 'auto', background: '#fff', position: 'relative' }}>
+        <div ref={ganttAreaRef} style={{ flex: 1, overflow: 'auto', background: 'var(--bg-card)', position: 'relative' }}>
           {/* Time header */}
           <div style={{ display: 'flex', background: 'var(--neutral-50)', borderBottom: '2px solid var(--border-light)', position: 'sticky', top: 0, zIndex: 10, flexShrink: 0 }}>
             {Array.from({ length: totalUnits }, (_, i) => (
@@ -401,8 +422,30 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
               const top = i * ROW_H + (ROW_H - 20) / 2;
               const barColor = getBarColor(t);
 
+              // Feature 1: Baseline bar
+              const baselineTask = baseline?.tasks.find(b => b.id === t.id);
+              const baselineLeft = baselineTask ? (baselineTask.start / divisor) * unitPx : null;
+              const baselineWidth = baselineTask ? Math.max((baselineTask.dur / divisor) * unitPx, 4) : null;
+
               return (
                 <div key={t.id} style={{ position: 'absolute', top: i * ROW_H, left: 0, height: ROW_H, width: '100%' }}>
+                  {/* Baseline bar */}
+                  {baselineLeft !== null && baselineWidth !== null && (
+                    <div
+                      title={`Baseline: inicio ${baselineTask!.start}h, dur ${baselineTask!.dur}h`}
+                      style={{
+                        position: 'absolute',
+                        left: baselineLeft,
+                        top: top + 22,
+                        width: baselineWidth,
+                        height: 4,
+                        background: '#94a3b8',
+                        borderRadius: 2,
+                        opacity: 0.65,
+                        zIndex: 1,
+                      }}
+                    />
+                  )}
                   {/* Slack indicator */}
                   {t.totalSlack > 0 && (
                     <div
@@ -474,7 +517,7 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
                         position: 'absolute',
                         left: Math.max(left, 0),
                         top: top + 26,
-                        background: '#fff',
+                        background: 'var(--bg-card)',
                         border: '1px solid var(--border-light)',
                         borderRadius: 'var(--radius-md)',
                         padding: 14,
@@ -511,8 +554,8 @@ export default function GanttChart({ tasks, projectStartDate, onUpdateTasks }: P
 
                       {/* Impact preview */}
                       {parseInt(editForm.dur) !== t.dur && (
-                        <div style={{ padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-sm)', marginBottom: 10, fontSize: 11 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>
+                        <div style={{ padding: '8px 10px', background: 'var(--warning-light)', border: '1px solid var(--warning)', borderRadius: 'var(--radius-sm)', marginBottom: 10, fontSize: 11 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--warning-dark, #92400e)', fontWeight: 600, marginBottom: 4 }}>
                             <AlertTriangle size={12} />
                             Impacto del cambio
                           </div>

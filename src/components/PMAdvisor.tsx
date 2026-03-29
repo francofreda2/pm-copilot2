@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ProjectData, Task } from '../types';
-import { Brain, Send, Loader2, AlertTriangle, TrendingUp, Clock, Target, Zap, RotateCcw, FileText } from 'lucide-react';
+import { Brain, Send, Loader2, AlertTriangle, TrendingUp, Clock, Target, Zap, RotateCcw, FileText, Mic, MicOff } from 'lucide-react';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Props {
   data: ProjectData;
@@ -90,6 +93,7 @@ function buildProjectSummary(data: ProjectData) {
 
   return `ESTADO ACTUAL DEL PROYECTO "${data.name}":
 - Tipo: ${data.projectType}
+- Metodología: ${data.methodology || 'predictive'}
 - Objetivo: ${data.businessObjective}
 - Estado general: ${data.status}
 - Total de tareas: ${data.tasks.length}
@@ -97,17 +101,24 @@ function buildProjectSummary(data: ProjectData) {
 - Duración total del proyecto: ${formatDuration(projectDuration)}
 - Horas totales de trabajo: ${formatDuration(totalHours)}
 - Tareas en ruta crítica: ${criticalTasks.map(t => `${t.id} (${t.name})`).join(', ') || 'Ninguna'}
-- Riesgos registrados: ${data.risks.length} (${data.risks.filter(r => r.v === 'high').length} altos)
-- KPIs: Alcance=${data.kpiScope || 'N/A'}, Cronograma=${data.kpiSchedule || 'N/A'}, Presupuesto=${data.kpiBudget || 'N/A'}
+- Riesgos registrados: ${data.risks.length} (${data.risks.filter(r => r.v === 'high' && r.status !== 'closed').length} altos abiertos)
+- Issues abiertos: ${(data.issues || []).filter(i => i.status === 'open' || i.status === 'in_progress').length}
+- Solicitudes de cambio pendientes: ${(data.changeRequests || []).filter(c => c.status === 'pending').length}
+- Recursos definidos: ${(data.resources || []).length}
+- Plan de comunicaciones: ${(data.communicationPlan || []).length} items
+- KPIs: Alcance=${data.kpiScope || 'N/A'}, Cronograma=${data.kpiSchedule || 'N/A'}, Calidad=${data.kpiQuality || 'N/A'}
 
 DETALLE DE TAREAS:
 ${data.tasks.map(t => {
   const cpmNode = nodes.find(n => n.id === t.id);
-  return `  ${t.id}: ${t.name} | Dur: ${formatDuration(Number(t.dur))} | Estado: ${t.status || 'pending'} | Pred: ${t.pred || '-'} | Rec: ${t.rec} | Holgura: ${cpmNode ? formatDuration(cpmNode.totalSlack) : 'N/A'} | Crítica: ${cpmNode?.isCritical ? 'SÍ' : 'NO'}`;
+  return `  ${t.id}: ${t.name} | Dur: ${formatDuration(Number(t.dur))} | Estado: ${t.status || 'pending'} | Pred: ${t.pred || '-'} | Rec: ${t.rec} | Holgura: ${cpmNode ? formatDuration(cpmNode.totalSlack) : 'N/A'} | Crítica: ${cpmNode?.isCritical ? 'SÍ' : 'NO'} | %: ${t.percentComplete ?? 0}% | Hs Reales: ${t.actualHours ?? 0}`;
 }).join('\n')}
 
 RIESGOS:
-${data.risks.length > 0 ? data.risks.map(r => `  ${r.id}: ${r.title} (${r.badge}) - ${r.desc}`).join('\n') : '  Sin riesgos registrados'}`;
+${data.risks.length > 0 ? data.risks.map(r => `  ${r.id}: ${r.title} (${r.badge}${r.status === 'closed' ? ' - CERRADO' : ''}) - P:${r.probability || '?'} I:${r.impact || '?'} Score:${r.riskScore || '?'} - ${r.desc}`).join('\n') : '  Sin riesgos registrados'}
+
+ISSUES ABIERTOS:
+${(data.issues || []).filter(i => i.status !== 'closed').map(i => `  ${i.id}: ${i.title} (${i.priority}) - ${i.assignee || 'Sin asignar'}`).join('\n') || '  Sin issues'}`;
 }
 
 const QUICK_ACTIONS = [
@@ -115,6 +126,8 @@ const QUICK_ACTIONS = [
   { icon: TrendingUp, label: 'Analizar salud general del proyecto', color: '#3b82f6' },
   { icon: Target, label: 'Sugerir optimizaciones de recursos', color: '#10b981' },
   { icon: FileText, label: 'Generar reporte gerencial semanal', color: '#8b5cf6' },
+  { icon: AlertTriangle, label: 'Identificar riesgos no registrados', color: '#f59e0b' },
+  { icon: Target, label: 'Revisar matriz RACI y sugerir mejoras', color: '#06b6d4' },
 ];
 
 export default function PMAdvisor({ data, onUpdate }: Props) {
@@ -122,7 +135,13 @@ export default function PMAdvisor({ data, onUpdate }: Props) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { isListening, isSupported: voiceSupported, startListening, stopListening, interimTranscript } = useVoiceInput({
+    onTranscript: (text) => setInput(prev => (prev ? prev + ' ' : '') + text),
+    onError: (msg) => { setVoiceError(msg); setTimeout(() => setVoiceError(null), 4000); },
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -138,15 +157,9 @@ export default function PMAdvisor({ data, onUpdate }: Props) {
     setInput('');
 
     try {
-      const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('API Key no configurada');
-
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-
       const projectContext = buildProjectSummary(data);
 
-      const prompt = `Eres un PM Asesor Senior experto en gestión de proyectos. Tienes acceso al estado actual del proyecto del usuario.
+      const systemInstruction = `Eres un PM Asesor Senior experto en gestión de proyectos. Tienes acceso al estado actual del proyecto del usuario.
 
 ${projectContext}
 
@@ -159,29 +172,73 @@ INSTRUCCIONES:
 - Usa tablas markdown cuando sea útil.
 - Al final de tu respuesta agrega una sección "### 💡 Recomendación" con 1-2 acciones concretas.
 
-PREGUNTA DEL PM: ${question}`;
+🚨 INSTRUCCIÓN CRÍTICA DE ACCIÓN 🚨
+Si el usuario te solicita EXPLÍCITAMENTE modificar el proyecto (ej. "Agregá esta tarea", "Cambia la fecha", "Añadí este riesgo", "Asignale esto a X"), o si te aprueba una sugerencia que implica cambiar la tabla, DEBES agregar EXCLUYENTEMENTE la siguiente etiqueta técnica al FINAL de tu respuesta, en una nueva línea:
+[REQUIRES_UPDATE]
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          thinkingConfig: { thinkingBudget: 1024 },
-          httpOptions: { timeout: 60000 },
+Solo usa esa etiqueta si hay un pedido directo de modificación al plan, cronograma, riesgos, u objetivos.`;
+
+      const history = messages.slice(0, -1).map(m => ({
+        role: (m.role === 'user' ? 'user' : 'model') as 'user' | 'model',
+        parts: [{ text: m.content }]
+      }));
+
+      const res = await fetch('/api/gemini/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction,
+          history: history.length > 0 ? history : undefined,
+          message: question,
           temperature: 0.5,
-        }
+        }),
       });
 
-      const responseText = response.text || 'No se pudo generar una respuesta.';
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+
+      const data_res = await res.json();
+      const rawResponse = data_res.text || 'No se pudo generar una respuesta.';
+      const hasUpdateKeyword = rawResponse.includes('[REQUIRES_UPDATE]');
+      const cleanResponse = rawResponse.replace('[REQUIRES_UPDATE]', '').trim();
       
       let msgType: 'analysis' | 'suggestion' | 'warning' | 'general' = 'general';
       if (question.toLowerCase().includes('qué pasa si') || question.toLowerCase().includes('impacto')) msgType = 'warning';
       else if (question.toLowerCase().includes('sugerir') || question.toLowerCase().includes('optimiz') || question.toLowerCase().includes('mejora')) msgType = 'suggestion';
       else if (question.toLowerCase().includes('anali') || question.toLowerCase().includes('estado') || question.toLowerCase().includes('salud')) msgType = 'analysis';
 
-      const advisorMsg: AdvisorMessage = { id: (Date.now() + 1).toString(), role: 'advisor', content: responseText, type: msgType };
+      const advisorMsg: AdvisorMessage = { 
+        id: (Date.now() + 1).toString(), 
+        role: 'advisor', 
+        content: cleanResponse, 
+        type: msgType, 
+        requiresUpdate: hasUpdateKeyword 
+      } as AdvisorMessage & { requiresUpdate?: boolean };
+      
       setMessages(prev => [...prev, advisorMsg]);
     } catch (err: any) {
       setError(err.message || 'Error al consultar al asesor');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleApplyChanges = async (msgId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      // Construct a fake chat history to send to the extraction function
+      const history = messages.map(m => ({ role: (m.role === 'user' ? 'user' : 'model') as 'user' | 'model', content: m.content, id: m.id }));
+      const { extractDashboardData } = await import('../services/geminiService');
+      const updatedData = await extractDashboardData(history, data);
+      onUpdate(updatedData);
+      
+      // Remove the action button from the message by clearing the flag
+      setMessages(messages.map(m => m.id === msgId ? { ...m, requiresUpdate: false } as any : m));
+    } catch (err: any) {
+      setError(err.message || "Error al intentar aplicar los cambios.");
     } finally {
       setIsLoading(false);
     }
@@ -207,7 +264,7 @@ PREGUNTA DEL PM: ${question}`;
             </div>
             <div>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>PM Asesor Inteligente</h3>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>Análisis de impacto · Escenarios What-If</p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', margin: 0, fontFamily: "'JetBrains Mono', monospace" }}>Análisis de impacto · Escenarios What-If · Acciones Directas</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
@@ -228,11 +285,11 @@ PREGUNTA DEL PM: ${question}`;
         {messages.length === 0 && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <Brain size={48} style={{ color: 'var(--neutral-200)', marginBottom: 16 }} />
-            <h4 style={{ fontSize: 16, fontWeight: 700, color: 'var(--neutral-700)', marginBottom: 8 }}>¿Qué te gustaría analizar?</h4>
+            <h4 style={{ fontSize: 16, fontWeight: 700, color: 'var(--neutral-700)', marginBottom: 8 }}>¿Qué te gustaría analizar o accionar?</h4>
             <p style={{ fontSize: 13, color: 'var(--neutral-500)', textAlign: 'center', maxWidth: 400, marginBottom: 24, lineHeight: 1.6 }}>
-              Preguntá sobre impacto de cambios, escenarios hipotéticos, optimizaciones o el estado general del proyecto.
+              Haceme preguntas o <strong style={{color:'var(--primary-600)'}}>pedime directamente que modifique el plan, agregue tareas o riesgos</strong> y lo aplicaré en tu Dashboard.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%', maxWidth: 500 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, width: '100%', maxWidth: 600 }}>
               {QUICK_ACTIONS.map((action, i) => (
                 <button
                   key={i}
@@ -259,8 +316,8 @@ PREGUNTA DEL PM: ${question}`;
               </div>
             ) : (
               <div style={{
-                background: msg.type === 'warning' ? '#fefce8' : msg.type === 'analysis' ? '#eff6ff' : msg.type === 'suggestion' ? '#f0fdf4' : '#fff',
-                border: `1.5px solid ${msg.type === 'warning' ? '#fde68a' : msg.type === 'analysis' ? '#bfdbfe' : msg.type === 'suggestion' ? '#bbf7d0' : 'var(--border-light)'}`,
+                background: msg.type === 'warning' ? 'var(--warning-light)' : msg.type === 'analysis' ? 'var(--primary-50)' : msg.type === 'suggestion' ? 'var(--success-light)' : 'var(--bg-card)',
+                border: `1.5px solid ${msg.type === 'warning' ? 'var(--warning)' : msg.type === 'analysis' ? 'var(--primary-200)' : msg.type === 'suggestion' ? 'var(--success)' : 'var(--border-light)'}`,
                 borderRadius: 'var(--radius-lg)',
                 padding: 20,
                 maxWidth: '95%',
@@ -274,16 +331,66 @@ PREGUNTA DEL PM: ${question}`;
                     {msg.type === 'warning' ? 'Análisis de Impacto' : msg.type === 'analysis' ? 'Análisis de Estado' : msg.type === 'suggestion' ? 'Recomendaciones' : 'PM Asesor'}
                   </span>
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--neutral-800)' }}>
-                  {msg.content.split('\n').map((line, i) => {
-                    if (line.startsWith('### ')) return <h4 key={i} style={{ fontSize: 14, fontWeight: 700, color: 'var(--neutral-900)', margin: '16px 0 8px' }}>{line.replace(/^###\s/, '').replace(/^[💡⚠🔴🟡🟢📊]+\s?/, '')}</h4>;
-                    if (line.startsWith('## ')) return <h3 key={i} style={{ fontSize: 15, fontWeight: 700, color: 'var(--neutral-900)', margin: '16px 0 8px' }}>{line.replace(/^##\s/, '')}</h3>;
-                    if (line.startsWith('- ') || line.startsWith('* ')) return <div key={i} style={{ paddingLeft: 12, borderLeft: '2px solid var(--border-light)', marginBottom: 6 }}>{line.replace(/^[-*]\s/, '')}</div>;
-                    if (line.startsWith('|')) return <div key={i} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, whiteSpace: 'pre' }}>{line}</div>;
-                    if (line.trim() === '') return <div key={i} style={{ height: 8 }} />;
-                    return <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>;
-                  })}
+                <div className="advisor-markdown" style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--neutral-800)' }}>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      h1: ({children}) => <h1 style={{ fontSize: 18, fontWeight: 800, color: 'var(--neutral-900)', margin: '20px 0 10px', borderBottom: '2px solid var(--border-light)', paddingBottom: 8 }}>{children}</h1>,
+                      h2: ({children}) => <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--neutral-900)', margin: '18px 0 10px', display: 'flex', alignItems: 'center', gap: 8 }}>{children}</h2>,
+                      h3: ({children}) => <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--neutral-900)', margin: '16px 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>{children}</h3>,
+                      h4: ({children}) => <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--neutral-800)', margin: '12px 0 6px' }}>{children}</h4>,
+                      p: ({children}) => <p style={{ margin: '0 0 10px', lineHeight: 1.7 }}>{children}</p>,
+                      ul: ({children}) => <ul style={{ margin: '8px 0 12px', paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</ul>,
+                      ol: ({children}) => <ol style={{ margin: '8px 0 12px', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</ol>,
+                      li: ({children, ordered, index}: any) => (
+                        <li style={{ paddingLeft: 14, borderLeft: '2.5px solid var(--primary-200)', fontSize: 13, lineHeight: 1.6, color: 'var(--neutral-700)' }}>
+                          {children}
+                        </li>
+                      ),
+                      strong: ({children}) => <strong style={{ fontWeight: 700, color: 'var(--neutral-900)' }}>{children}</strong>,
+                      em: ({children}) => <em style={{ fontStyle: 'italic', color: 'var(--neutral-600)' }}>{children}</em>,
+                      blockquote: ({children}) => (
+                        <blockquote style={{ margin: '12px 0', padding: '10px 16px', borderLeft: '3px solid var(--primary-400)', background: 'var(--primary-50)', borderRadius: '0 8px 8px 0', fontSize: 13, color: 'var(--neutral-700)' }}>
+                          {children}
+                        </blockquote>
+                      ),
+                      table: ({children}) => (
+                        <div style={{ overflow: 'auto', margin: '12px 0', borderRadius: 8, border: '1px solid var(--border-light)' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>{children}</table>
+                        </div>
+                      ),
+                      thead: ({children}) => <thead style={{ background: 'var(--neutral-50)' }}>{children}</thead>,
+                      th: ({children}) => <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '2px solid var(--border-light)' }}>{children}</th>,
+                      td: ({children}) => <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--neutral-700)', borderBottom: '1px solid var(--border-subtle, var(--border-light))' }}>{children}</td>,
+                      code({node, inline, className, children, ...props}: any) {
+                        return !inline ? (
+                          <pre style={{ background: 'var(--neutral-900)', color: '#e2e8f0', padding: 16, borderRadius: 8, overflow: 'auto', fontSize: 11, margin: '12px 0', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6 }}>
+                            <code className={className} {...props}>{children}</code>
+                          </pre>
+                        ) : (
+                          <code style={{ background: 'var(--neutral-100)', color: 'var(--primary-700)', padding: '2px 6px', borderRadius: 4, fontSize: 12, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }} {...props}>{children}</code>
+                        );
+                      },
+                      hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border-light)', margin: '16px 0' }} />,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
+                {(msg as any).requiresUpdate && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--border-light)' }}>
+                    <button 
+                      onClick={() => handleApplyChanges(msg.id)}
+                      disabled={isLoading}
+                      className="btn btn-primary" 
+                      style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--primary-600)' }}>
+                      <Zap size={14} /> ⚡ Aplicar a mi Proyecto
+                    </button>
+                    <p style={{ fontSize: 11, color: 'var(--neutral-500)', marginTop: 8, marginBottom: 0 }}>
+                      Al hacer clic, el Asesor leerá la conversación y actualizará tu Dashboard con estos cambios.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -302,16 +409,47 @@ PREGUNTA DEL PM: ${question}`;
 
       {/* Input */}
       <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border-light)' }}>
+        {voiceError && (
+          <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--error, #ef4444)', textAlign: 'center' }}>{voiceError}</div>
+        )}
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 10, maxWidth: 800, margin: '0 auto' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <input
-              value={input}
+              value={isListening && interimTranscript ? input + interimTranscript : input}
               onChange={e => setInput(e.target.value)}
-              placeholder="Ej: ¿Qué pasa si aumento la duración de T3 a 16 horas?"
+              placeholder={isListening ? '🎤 Escuchando...' : 'Ej: Agregá la tarea T5 con 8 horas, predecesora T3'}
               className="form-input"
-              style={{ paddingRight: 48 }}
+              style={{ paddingRight: voiceSupported ? 72 : 48 }}
               disabled={isLoading}
             />
+            {voiceSupported && (
+              <button
+                type="button"
+                onClick={isListening ? stopListening : startListening}
+                disabled={isLoading}
+                title={isListening ? 'Detener grabación' : 'Comando de voz'}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: isListening ? 'var(--error, #ef4444)' : 'var(--neutral-200)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: isListening ? '#fff' : 'var(--neutral-600)',
+                  transition: 'all 0.2s',
+                  animation: isListening ? 'pulse 1.2s infinite' : 'none',
+                }}
+              >
+                {isListening ? <MicOff size={13} /> : <Mic size={13} />}
+              </button>
+            )}
           </div>
           <button type="submit" disabled={!input.trim() || isLoading} className="btn btn-primary" style={{ flexShrink: 0 }}>
             <Send size={16} />
