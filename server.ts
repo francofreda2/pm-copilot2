@@ -73,7 +73,7 @@ async function startServer() {
   if (process.env.NODE_ENV === "production") {
     const { default: path } = await import('path');
     app.use(express.static(path.join(process.cwd(), 'dist')));
-    app.get('{*path}', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
     });
   } else {

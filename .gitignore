@@ -30,6 +30,11 @@ dist-ssr
 .env.test.local
 .env.production.local
 
+# Secrets
+GEMINI_API_KEY.env.txt
+err.txt
+dev_output.log
+
 # Database
 database.sqlite
 database.sqlite-journal
