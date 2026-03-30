@@ -109,38 +109,62 @@ export class PMChatService {
 }
 
 export async function extractDashboardData(messages: ChatMessage[], currentData: ProjectData): Promise<ProjectData> {
-  const chatHistory = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n---\n\n');
+  // Trim chat history to last 15 messages to avoid token overflow
+  const recentMessages = messages.slice(-15);
+  const chatHistory = recentMessages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n---\n\n');
+
+  // Build a compact version of currentData (exclude SVGs, chat messages, and change log)
+  const compactData = {
+    name: currentData.name,
+    businessObjective: currentData.businessObjective,
+    projectType: currentData.projectType,
+    methodology: currentData.methodology,
+    status: currentData.status,
+    kpiScope: currentData.kpiScope,
+    kpiSchedule: currentData.kpiSchedule,
+    kpiBudget: currentData.kpiBudget,
+    kpiQuality: currentData.kpiQuality,
+    milestones: currentData.milestones,
+    oeps: currentData.oeps,
+    activities: currentData.activities,
+    tasks: currentData.tasks.map(t => ({ id: t.id, name: t.name, dur: t.dur, pred: t.pred, rec: t.rec, rc: t.rc, start: t.start, status: t.status })),
+    risks: currentData.risks.map(r => ({ id: r.id, title: r.title, v: r.v, badge: r.badge, desc: r.desc })),
+    resources: currentData.resources,
+    stakeholders: currentData.stakeholders,
+    communicationPlan: currentData.communicationPlan,
+    budgetLines: currentData.budgetLines,
+    issues: currentData.issues,
+    changeRequests: currentData.changeRequests,
+    lessonsLearned: currentData.lessonsLearned,
+  };
 
   const prompt = `
 Analiza el siguiente historial de chat entre un usuario y un Project Manager (PM Copilot).
 Extrae TODA la información estructurada del proyecto para poblar un Dashboard Ejecutivo.
 
-IMPORTANTE: Extraé la MÁXIMA cantidad de datos posible. Si en el chat se mencionan tareas, riesgos, hitos, actividades, recursos, etc., TODOS deben aparecer en la extracción. No omitas nada.
+IMPORTANTE: Extraé la MÁXIMA cantidad de datos posible. No omitas nada.
 
 Extrae o deduce:
-- milestones: [{n, w, s: 'done'|'active'|'pending'}] — Extraé TODOS los hitos mencionados
-- oeps: [{id, n, kpi}] — Extraé TODOS los objetivos con KPIs medibles
-- activities: [{n, r, d, s: 'pend'|'prog'|'ok'}] — Extraé TODAS las actividades próximas
-- tasks: [{id, name, om, p, te, pred, rec, rc, start, dur}] — Extraé TODAS las tareas del cronograma. dur en HORAS (8h = 1 día). Asigná predecesoras lógicas. start debe ser calculado secuencialmente.
-- risks: [{v: 'high'|'mid'|'low', id, title, badge, desc, probability, impact, riskScore, category, owner}] — Extraé TODOS los riesgos con scores
-- resources: [{id, name, role, availability, costPerHour}] — Inferí recursos de las tareas si no están explícitos
-- raciMatrix: [{taskId, resourceId, role: 'R'|'A'|'C'|'I'}] — Generá la RACI basándote en tareas y recursos
+- milestones: [{n, w, s: 'done'|'active'|'pending'}]
+- oeps: [{id, n, kpi}]
+- activities: [{n, r, d, s: 'pend'|'prog'|'ok'}]
+- tasks: [{id, name, om, p, te, pred, rec, rc, start, dur}] — dur en HORAS (8h=1día). start secuencial desde 0.
+- risks: [{v: 'high'|'mid'|'low', id, title, badge, desc, probability, impact, riskScore, category, owner}]
+- resources: [{id, name, role, availability, costPerHour}]
+- raciMatrix: [{taskId, resourceId, role: 'R'|'A'|'C'|'I'}]
+- communicationPlan: [{id, what, audience, frequency, channel, responsible}]
+- stakeholders: [{id, name, role, organization, influence, interest, strategy}]
+- budgetLines: [{id, category, description, planned, actual}]
 - issues: [{id, title, description, priority, status, assignee, createdAt}]
 - changeRequests: [{id, title, description, requestedBy, requestedAt, status, impactScope, impactSchedule, impactCost}]
-- communicationPlan: [{id, what, audience, frequency, channel, responsible}] — Extraé el plan de comunicaciones
-- stakeholders: [{id, name, role, organization, influence: 'high'|'medium'|'low', interest: 'high'|'medium'|'low', strategy}] — Extraé stakeholders mencionados
-- budgetLines: [{id, category, description, planned, actual}] — Extraé líneas de presupuesto si se mencionan
-- issues: [{id, title, description, priority, status, assignee, createdAt}] — Extraé issues/problemas
-- changeRequests: [{id, title, description, requestedBy, requestedAt, status, impactScope, impactSchedule, impactCost}] — Extraé solicitudes de cambio
-- lessonsLearned: [{id, phase, category, description, recommendation, createdAt}] — Extraé lecciones aprendidas
-- KPIs: kpiScope, kpiSchedule, kpiBudget, kpiQuality — Valores concretos como "95%", "On Track", etc.
-- flowSvg, wbsSvg (SVG code or empty)
+- lessonsLearned: [{id, phase, category, description, recommendation, createdAt}]
+- KPIs: kpiScope, kpiSchedule, kpiBudget, kpiQuality
+- flowSvg, wbsSvg (SVG code or empty string)
 
 Si un campo no fue discutido, devuelve el valor actual o arreglo vacío.
-Para las tareas: calculá el campo 'start' de forma secuencial basándote en las predecesoras. La primera tarea empieza en 0.
 
 Datos actuales:
-${JSON.stringify(currentData, null, 2)}
+${JSON.stringify(compactData)}
 
 Historial de Chat:
 ${chatHistory}
@@ -178,13 +202,25 @@ ${chatHistory}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, responseSchema, temperature: 0.3 }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('extractDashboardData server error:', errData);
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
     const data = await res.json();
-    const extracted = JSON.parse(data.text?.trim() || '{}');
+    const rawText = data.text?.trim() || '{}';
+    let extracted;
+    try {
+      extracted = JSON.parse(rawText);
+    } catch {
+      // Try to extract JSON from response if it has extra text
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      extracted = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    }
     return { ...currentData, ...extracted };
-  } catch (error) {
-    console.error("Error extrayendo datos para el dashboard:", error);
-    throw new Error("No se pudo sincronizar el dashboard con el chat.");
+  } catch (error: any) {
+    console.error("Error extrayendo datos para el dashboard:", error?.message || error);
+    throw new Error(`No se pudo sincronizar el dashboard: ${error?.message || 'Error desconocido'}`);
   }
 }
 
@@ -243,9 +279,20 @@ Hitos: ${data.milestones.map(m => `${m.n} (${m.w})`).join('; ') || 'Ninguno'}`;
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, responseSchema: config.schema, temperature: 0.4 }),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
+    console.error('generateArtifact server error:', errData);
+    throw new Error(errData.error || `HTTP ${res.status}`);
+  }
   const result = await res.json();
-  return JSON.parse(result.text?.trim() || '{}');
+  const rawText = result.text?.trim() || '{}';
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    throw new Error('Gemini no devolvió JSON válido');
+  }
 }
 
 export async function generateProjectFromFileData(extractedText: string, fileType: string): Promise<any> {

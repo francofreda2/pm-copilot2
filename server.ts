@@ -34,15 +34,19 @@ async function startServer() {
     try {
       const { systemInstruction, history, message, temperature } = req.body;
       const ai = new GoogleGenAI({ apiKey: geminiKey });
+      // Limit history to last 20 messages to avoid token overflow
+      const trimmedHistory = history && history.length > 20 ? history.slice(-20) : history;
+      console.log(`[Gemini Chat] History: ${trimmedHistory?.length || 0} msgs, Message length: ${message?.length || 0}`);
       const chat = ai.chats.create({
         model: "gemini-2.5-flash",
-        config: { systemInstruction, temperature: temperature ?? 0.7, thinkingConfig: { thinkingBudget: 2048 }, httpOptions: { timeout: 120000 } },
-        history: history || undefined,
+        config: { systemInstruction, temperature: temperature ?? 0.7, thinkingConfig: { thinkingBudget: 2048 }, httpOptions: { timeout: 180000 } },
+        history: trimmedHistory || undefined,
       });
       const response = await chat.sendMessage({ message });
       res.json({ text: response.text || "" });
     } catch (err: any) {
       console.error("Gemini proxy error:", err?.message);
+      console.error("Gemini proxy full error:", JSON.stringify(err, null, 2)?.substring(0, 1000));
       res.status(500).json({ error: err?.message || "Gemini error" });
     }
   });
@@ -54,17 +58,25 @@ async function startServer() {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
       const config: any = {
         temperature: temperature ?? 0.3,
-        thinkingConfig: { thinkingBudget: 4096 },
-        httpOptions: { timeout: 120000 },
+        httpOptions: { timeout: 180000 },
       };
       if (responseSchema) {
         config.responseMimeType = "application/json";
         config.responseSchema = responseSchema;
+        // Disable thinking for structured output to avoid conflicts and timeouts
+        config.thinkingConfig = { thinkingBudget: 0 };
+      } else {
+        config.thinkingConfig = { thinkingBudget: 4096 };
       }
-      const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: prompt, config });
+      const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+      // Truncate very long prompts to avoid token limits
+      const truncatedPrompt = promptText.length > 30000 ? promptText.substring(0, 30000) + '\n[...contenido truncado por longitud...]' : promptText;
+      console.log(`[Gemini Generate] Schema: ${responseSchema ? 'YES' : 'NO'}, Prompt length: ${promptText.length}${promptText.length > 30000 ? ' (truncated)' : ''}`);
+      const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: truncatedPrompt, config });
       res.json({ text: response.text || "" });
     } catch (err: any) {
       console.error("Gemini generate error:", err?.message);
+      console.error("Gemini generate full error:", JSON.stringify(err, null, 2)?.substring(0, 1000));
       res.status(500).json({ error: err?.message || "Gemini error" });
     }
   });
